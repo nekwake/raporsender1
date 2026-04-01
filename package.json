@@ -1,0 +1,27 @@
+{
+  "name": "raporsender1",
+  "version": "1.0.0",
+  "description": "Branch report sender desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"No tests configured\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nekwake/raporsender1.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/nekwake/raporsender1/issues"
+  },
+  "homepage": "https://github.com/nekwake/raporsender1#readme",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "electron": "^41.1.0",
+    "fs-extra": "^11.3.4"
+  }
+}

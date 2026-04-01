@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Merkez Rapor Aktarım</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-title">
+        <span class="brand-dot"></span>
+        <div>
+          <h1>Bridge V1</h1>
+          <p>Excel rapor aktarımı</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <p class="subtitle">
+        Kaynak klasöre bırakılan dosyaları otomatik olarak hedef klasöre taşır.
+      </p>
+
+      <section class="card">
+        <h2>Kaynak Klasör (bu klasörden çek)</h2>
+        <div class="row">
+          <input id="watchPath" type="text" readonly />
+          <button id="pickWatch">Seç</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Hedef Klasör (`gidecek-rapor`)</h2>
+        <div class="row">
+          <input id="drivePath" type="text" readonly />
+          <button id="pickDrive">Seç</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <button id="sendNow" class="primary">Gönder</button>
+          <span id="counter"></span>
+        </div>
+        <div id="statusBox" class="status">Hazır.</div>
+      </section>
+
+      <section class="card">
+        <h2>Son Gönderilenler</h2>
+        <ul id="sentList"></ul>
+      </section>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>
