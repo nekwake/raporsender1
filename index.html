@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Merkez Rapor Aktarım</title>
+    <title>Bridge V1</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./assets/icon.png" />
   </head>
   <body>
     <header class="topbar">
@@ -12,36 +13,54 @@
         <span class="brand-dot"></span>
         <div>
           <h1>Bridge V1</h1>
-          <p>Excel rapor aktarımı</p>
+          <p>Excel/PDF tablo hazırlama ve aktarım</p>
         </div>
+      </div>
+      <div class="targetBar">
+        <div class="targetMeta">
+          <div class="targetLabel">Hedef klasör</div>
+          <div id="targetPathLabel" class="targetPath">Seçilmedi</div>
+        </div>
+        <button id="pickTarget" class="ghost">Seç</button>
       </div>
     </header>
 
     <main class="container">
       <p class="subtitle">
-        Kaynak klasöre bırakılan dosyaları otomatik olarak hedef klasöre taşır.
+        Excel’den tabloyu kopyalayıp buraya yapıştırın (Ctrl+V) veya dosyayı sürükleyip bırakın. Program, boş satır/sütunları temizler ve merkeze-gider formatında Excel olarak kaydeder.
       </p>
 
-      <section class="card">
-        <h2>Kaynak Klasör (bu klasörden çek)</h2>
-        <div class="row">
-          <input id="watchPath" type="text" readonly />
-          <button id="pickWatch">Seç</button>
+      <section id="dropCard" class="card">
+        <h2>Yapıştır / Sürükle</h2>
+        <div class="dropZone" id="dropZone" tabindex="0">
+          <div class="dropIcon">📥</div>
+          <div class="dropText">
+            <div class="dropTitle">Ctrl+V ile Excel tablosu yapıştırın</div>
+            <div class="dropSub">veya Excel/Csv/PDF dosyasını buraya bırakın.</div>
+          </div>
+        </div>
+
+        <div id="pasteHint" class="helperBox">
+          İpucu: Excel’de ilgili tabloyu seçip kopyalayın, sonra bu uygulamaya geçip `Ctrl+V` yapın.
         </div>
       </section>
 
-      <section class="card">
-        <h2>Hedef Klasör (`gidecek-rapor`)</h2>
-        <div class="row">
-          <input id="drivePath" type="text" readonly />
-          <button id="pickDrive">Seç</button>
+      <section id="previewCard" class="card hidden">
+        <div class="previewHead">
+          <div>
+            <h2>Önizleme</h2>
+            <div id="previewMeta" class="muted"></div>
+          </div>
+          <button id="clearNow" class="ghost">Temizle</button>
         </div>
+        <div id="previewTableWrap" class="tableWrap"></div>
       </section>
 
       <section class="card">
         <div class="row">
           <button id="sendNow" class="primary">Gönder</button>
-          <span id="counter"></span>
+          <button id="infoNow" class="secondary" disabled>Bilgi ver</button>
+          <span id="counter" class="muted"></span>
         </div>
         <div id="statusBox" class="status">Hazır.</div>
       </section>

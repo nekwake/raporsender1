@@ -2,9 +2,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("bridgeApi", {
   getConfig: () => ipcRenderer.invoke("get-config"),
-  chooseWatchFolder: () => ipcRenderer.invoke("choose-watch-folder"),
-  chooseDriveFolder: () => ipcRenderer.invoke("choose-drive-folder"),
-  sendNow: () => ipcRenderer.invoke("send-now"),
+  chooseTargetFolder: () => ipcRenderer.invoke("choose-target-folder"),
+  parseFileBuffer: (payload) => ipcRenderer.invoke("parse-file-buffer", payload),
+  sendGrid: (payload) => ipcRenderer.invoke("send-grid", payload),
   getLastSent: () => ipcRenderer.invoke("last-sent"),
   onStatus: (callback) => {
     ipcRenderer.on("status", (_event, payload) => callback(payload));
