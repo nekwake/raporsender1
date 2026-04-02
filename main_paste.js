@@ -14,6 +14,10 @@ const STATE_FILE = path.join(APP_DIR, "state.json");
 
 const DEFAULT_TARGET_PATH = path.join(os.homedir(), "Desktop", "merkeze-gider");
 
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.nekwake.assistant");
+}
+
 let mainWindow = null;
 let state = {
   targetPath: "",
@@ -229,7 +233,8 @@ ipcMain.handle("parse-file-buffer", async (_event, payload) => {
 });
 
 ipcMain.handle("send-grid", async (_event, payload) => {
-  const { grid, suggestedBaseName } = payload || {};
+  const { grid, suggestedBaseName, fileName: preferredStem, exportKind } =
+    payload || {};
 
   if (!state.targetPath) {
     sendStatus("Hedef klasör seçilmedi.", "warn");
@@ -249,19 +254,35 @@ ipcMain.handle("send-grid", async (_event, payload) => {
     return { deduped: true, fileName: already.fileName, hash };
   }
 
-  // Export normalizedGrid to a single XLSX file.
-  const ws = xlsx.utils.aoa_to_sheet(normalizedGrid);
-  const wb = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(wb, ws, "Sheet1");
-  const outBuffer = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+  let outBuffer;
+  if (exportKind === "dayEndSummary") {
+    outBuffer = await writeStyledReportXlsxBuffer(
+      normalizedGrid,
+      "Gün Sonu Özet",
+    );
+  } else {
+    const ws = xlsx.utils.aoa_to_sheet(normalizedGrid);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Sheet1");
+    outBuffer = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+  }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const base = sanitizeFileBaseName(suggestedBaseName || "rapor");
+  let fileName;
+  const stemRaw = preferredStem && String(preferredStem).trim();
+  if (stemRaw) {
+    let stem = sanitizeDesktopFileName(stemRaw.replace(/\.xlsx$/i, ""));
+    if (!stem) stem = "rapor";
+    fileName = stem.toLowerCase().endsWith(".xlsx") ? stem : `${stem}.xlsx`;
+  } else {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const base = sanitizeFileBaseName(suggestedBaseName || "rapor");
+    fileName = `${base}_${timestamp}.xlsx`;
+  }
 
-  let fileName = `${base}_${timestamp}.xlsx`;
   let attempt = 1;
+  const stemForDup = fileName.replace(/\.xlsx$/i, "");
   while (fileExists(path.join(state.targetPath, fileName)) && attempt < 1000) {
-    fileName = `${base}_${timestamp}_${attempt}.xlsx`;
+    fileName = `${stemForDup}_${attempt}.xlsx`;
     attempt += 1;
   }
 
@@ -309,12 +330,12 @@ function uniqueSheetName(name, usedNames) {
 }
 
 /**
- * Aylık stok kapanışı: xlsx (SheetJS) stilleri yazamaz; ExcelJS ile sınır, başlık rengi ve sütun genişliği.
+ * Stok / gün sonu gibi raporlar: kırmızı başlık, kenarlık, sütun genişliği (SheetJS ile yapılamaz).
  */
-async function writeMonthlyStockXlsxBuffer(grid) {
+async function writeStyledReportXlsxBuffer(grid, worksheetName) {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Assistant";
-  const ws = wb.addWorksheet("Stok Kapanış");
+  const ws = wb.addWorksheet(worksheetName || "Rapor");
 
   const numRows = grid.length;
   const numCols = grid.reduce(
@@ -366,8 +387,268 @@ async function writeMonthlyStockXlsxBuffer(grid) {
   return Buffer.from(buf);
 }
 
+const AUDIT_HEADER_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFC62828" },
+};
+const AUDIT_HEADER_FONT = { bold: true, color: { argb: "FFFFFFFF" } };
+const AUDIT_THIN = { style: "thin", color: { argb: "FF000000" } };
+const AUDIT_ALL_BORDERS = {
+  top: AUDIT_THIN,
+  left: AUDIT_THIN,
+  bottom: AUDIT_THIN,
+  right: AUDIT_THIN,
+};
+const AUDIT_SECTION_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFE0E7FF" },
+};
+
+function detectAuditOzetRowKind(row) {
+  const cells = row.map((c) => String(c ?? "").trim());
+  const nonEmpty = cells.filter((x) => x.length > 0);
+  if (nonEmpty.length === 0) return "blank";
+
+  if (cells[0] === "DEĞERLENDİRME ÖZETİ") return "section";
+  if (
+    cells[0] === "Kategori" &&
+    cells[1] === "Maksimum" &&
+    cells[2] === "Alınan"
+  ) {
+    return "sumHeader";
+  }
+  if (cells[0]?.startsWith("Skala:")) return "scale";
+  if (cells[0]?.startsWith("Not:")) return "footnote";
+
+  if (nonEmpty.length === 1 && cells[0].length > 30) return "docTitle";
+
+  if (
+    cells[0] &&
+    cells[1] !== undefined &&
+    String(cells[1]).length > 0 &&
+    (!cells[2] || String(cells[2]).trim() === "") &&
+    cells.length <= 3
+  ) {
+    const labels = [
+      "Şube adı",
+      "Şube müdürü",
+      "Bölge sorumlusu",
+      "Raporu hazırlayan",
+      "Ziyaret günü müdür",
+      "Rapor tarihi",
+    ];
+    if (labels.includes(cells[0])) return "metaPair";
+  }
+
+  if (
+    cells.length >= 4 &&
+    ["Kalite", "Servis", "Temizlik ve güvenlik"].some((p) =>
+      cells[0]?.startsWith(p),
+    )
+  ) {
+    return "sumRow";
+  }
+
+  const totals = [
+    "Toplam maksimum",
+    "Toplam alınan",
+    "Genel yüzde",
+    "Not (skala)",
+  ];
+  if (totals.some((t) => cells[0]?.startsWith(t))) return "totalRow";
+
+  if (nonEmpty.length === 1) return "singleLine";
+
+  return "body";
+}
+
+async function fillAuditOzetWorksheet(ws, grid) {
+  const numCols = Math.max(6, grid.reduce((m, r) => Math.max(m, r.length), 0));
+
+  for (let ridx = 0; ridx < grid.length; ridx++) {
+    const rowArr = grid[ridx] ?? [];
+    const padded = [];
+    for (let c = 0; c < numCols; c++) {
+      const v = rowArr[c];
+      padded.push(v === "" || v == null ? "" : v);
+    }
+
+    const kind = detectAuditOzetRowKind(rowArr);
+    const row = ws.addRow(padded);
+
+    if (kind === "blank") {
+      row.height = 6;
+      continue;
+    }
+
+    if (kind === "docTitle") {
+      row.height = 28;
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        if (colNumber <= numCols) {
+          cell.border = AUDIT_ALL_BORDERS;
+          cell.font = { bold: true, size: 14, color: { argb: "FF1e3a8a" } };
+          cell.alignment = { vertical: "middle", wrapText: true };
+        }
+      });
+      try {
+        ws.mergeCells(ridx + 1, 1, ridx + 1, numCols);
+      } catch {
+        /* */
+      }
+      continue;
+    }
+
+    if (kind === "section") {
+      row.height = 20;
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = AUDIT_ALL_BORDERS;
+        cell.fill = AUDIT_SECTION_FILL;
+        cell.font = { bold: true, size: 12 };
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+      try {
+        ws.mergeCells(ridx + 1, 1, ridx + 1, numCols);
+      } catch {
+        /* */
+      }
+      continue;
+    }
+
+    if (kind === "sumHeader") {
+      row.height = 22;
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = AUDIT_ALL_BORDERS;
+        cell.fill = AUDIT_HEADER_FILL;
+        cell.font = AUDIT_HEADER_FONT;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+      continue;
+    }
+
+    if (kind === "sumRow" || kind === "totalRow" || kind === "metaPair") {
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cell.border = AUDIT_ALL_BORDERS;
+        cell.alignment = { vertical: "middle", wrapText: true };
+        if (kind === "metaPair") {
+          cell.font =
+            colNumber === 1
+              ? { bold: true, color: { argb: "FF334155" } }
+              : { color: { argb: "FF0f172a" } };
+        } else if (kind === "sumRow" && colNumber === 1) {
+          cell.font = { bold: true };
+        } else if (kind === "totalRow" && colNumber === 1) {
+          cell.font = { bold: true, color: { argb: "FF1e3a8a" } };
+        }
+      });
+      continue;
+    }
+
+    if (kind === "scale" || kind === "footnote" || kind === "singleLine") {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = AUDIT_ALL_BORDERS;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+      if (kind === "scale") {
+        row.getCell(1).font = { italic: true, color: { argb: "FF475569" } };
+      }
+      if (kind === "footnote" || kind === "singleLine") {
+        try {
+          ws.mergeCells(ridx + 1, 1, ridx + 1, numCols);
+        } catch {
+          /* */
+        }
+      }
+      continue;
+    }
+
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = AUDIT_ALL_BORDERS;
+      cell.alignment = { vertical: "middle", wrapText: true };
+    });
+  }
+
+  for (let c = 1; c <= numCols; c++) {
+    let maxLen = 10;
+    for (const r of grid) {
+      const v = r[c - 1];
+      const s = v == null ? "" : String(v);
+      if (s.length > maxLen) maxLen = Math.min(s.length, 120);
+    }
+    const w = Math.min(Math.max(maxLen * 0.09 + 1.5, 12), 52);
+    ws.getColumn(c).width = w;
+  }
+}
+
+async function fillAuditTabularSheet(ws, grid, opts) {
+  const headerRows = opts?.headerRows ?? new Set([0]);
+  const numRows = grid.length;
+  const numCols = grid.reduce(
+    (m, r) => Math.max(m, Array.isArray(r) ? r.length : 0),
+    0,
+  );
+
+  for (let ridx = 0; ridx < numRows; ridx++) {
+    const rowArr = grid[ridx];
+    const padded = [];
+    for (let c = 0; c < numCols; c++) {
+      const v = rowArr && rowArr[c];
+      padded.push(v === "" || v == null ? "" : v);
+    }
+    const row = ws.addRow(padded);
+    if (headerRows.has(ridx)) row.height = 22;
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = AUDIT_ALL_BORDERS;
+      if (headerRows.has(ridx)) {
+        cell.fill = AUDIT_HEADER_FILL;
+        cell.font = AUDIT_HEADER_FONT;
+      }
+      cell.alignment = { vertical: "middle", wrapText: true };
+    });
+  }
+
+  for (let c = 1; c <= numCols; c++) {
+    let maxLen = 8;
+    for (let ridx = 0; ridx < numRows; ridx++) {
+      const rowArr = grid[ridx];
+      const v = rowArr && rowArr[c - 1];
+      const s = v == null ? "" : String(v);
+      if (s.length > maxLen) maxLen = s.length;
+    }
+    const cap = c >= 3 ? 56 : 22;
+    const w = Math.min(Math.max(maxLen * 0.09 + 1.8, 11), cap);
+    ws.getColumn(c).width = w;
+  }
+}
+
+async function writeAuditWorkbookBuffer({ ozet, detayWithHeader, eksikWithHeader }) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Assistant";
+  const used = new Set();
+
+  const nmOzet = uniqueSheetName("Özet", used);
+  const wsOzet = wb.addWorksheet(nmOzet);
+  await fillAuditOzetWorksheet(wsOzet, ozet);
+
+  const nmDetay = uniqueSheetName("Detay", used);
+  const wsDetay = wb.addWorksheet(nmDetay);
+  await fillAuditTabularSheet(wsDetay, detayWithHeader, {
+    headerRows: new Set([0]),
+  });
+
+  const nmEksik = uniqueSheetName("Tam puan alınmayan", used);
+  const wsEksik = wb.addWorksheet(nmEksik);
+  await fillAuditTabularSheet(wsEksik, eksikWithHeader, {
+    headerRows: new Set([0]),
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf);
+}
+
 ipcMain.handle("save-xlsx-desktop", async (_event, payload) => {
-  const { grid, fileName, sheets, exportKind } = payload || {};
+  const { grid, fileName, sheets, exportKind, auditBook } = payload || {};
 
   let outBuffer;
 
@@ -375,7 +656,28 @@ ipcMain.handle("save-xlsx-desktop", async (_event, payload) => {
     if (!Array.isArray(grid) || !grid.length) {
       throw new Error("Kaydedilecek tablo boş.");
     }
-    outBuffer = await writeMonthlyStockXlsxBuffer(grid);
+    outBuffer = await writeStyledReportXlsxBuffer(grid, "Stok Kapanış");
+  } else if (exportKind === "dayEndSummary") {
+    if (!Array.isArray(grid) || !grid.length) {
+      throw new Error("Kaydedilecek tablo boş.");
+    }
+    outBuffer = await writeStyledReportXlsxBuffer(grid, "Gün Sonu Özet");
+  } else if (exportKind === "auditWorkbook") {
+    const ozet = auditBook?.ozet;
+    const detayWithHeader = auditBook?.detayWithHeader;
+    const eksikWithHeader = auditBook?.eksikWithHeader;
+    if (
+      !Array.isArray(ozet) ||
+      !Array.isArray(detayWithHeader) ||
+      !Array.isArray(eksikWithHeader)
+    ) {
+      throw new Error("Denetim kitabı verisi eksik.");
+    }
+    outBuffer = await writeAuditWorkbookBuffer({
+      ozet,
+      detayWithHeader,
+      eksikWithHeader,
+    });
   } else {
     const wb = xlsx.utils.book_new();
     let hasData = false;

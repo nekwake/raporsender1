@@ -1,18 +1,21 @@
 /**
- * Assistant — renderer: home mode selection, monthly stock, audit form, generic "other" paste flow.
+ * Assistant — renderer: gün sonu özeti, aylık stok, denetim formu, diğer yapıştırma akışı.
  */
 
 const topbarSubtitle = document.getElementById("topbarSubtitle");
 const targetBar = document.getElementById("targetBar");
 
 const viewHome = document.getElementById("viewHome");
+const viewDayEnd = document.getElementById("viewDayEnd");
 const viewStock = document.getElementById("viewStock");
 const viewAudit = document.getElementById("viewAudit");
 const viewOther = document.getElementById("viewOther");
 
+const btnModeDayEnd = document.getElementById("btnModeDayEnd");
 const btnModeStock = document.getElementById("btnModeStock");
 const btnModeAudit = document.getElementById("btnModeAudit");
 const btnModeOther = document.getElementById("btnModeOther");
+const backFromDayEnd = document.getElementById("backFromDayEnd");
 const backFromStock = document.getElementById("backFromStock");
 const backFromAudit = document.getElementById("backFromAudit");
 const backFromOther = document.getElementById("backFromOther");
@@ -26,6 +29,17 @@ const stockPreviewMeta = document.getElementById("stockPreviewMeta");
 const stockPreviewWrap = document.getElementById("stockPreviewWrap");
 const stockFileHint = document.getElementById("stockFileHint");
 const statusBoxStock = document.getElementById("statusBoxStock");
+
+const dropZoneDayEnd = document.getElementById("dropZoneDayEnd");
+const daySummaryDate = document.getElementById("daySummaryDate");
+const saveDayEndDesktop = document.getElementById("saveDayEndDesktop");
+const sendDayEnd = document.getElementById("sendDayEnd");
+const clearDayEnd = document.getElementById("clearDayEnd");
+const dayEndPreviewCard = document.getElementById("dayEndPreviewCard");
+const dayEndPreviewMeta = document.getElementById("dayEndPreviewMeta");
+const dayEndPreviewWrap = document.getElementById("dayEndPreviewWrap");
+const dayEndFileHint = document.getElementById("dayEndFileHint");
+const statusBoxDayEnd = document.getElementById("statusBoxDayEnd");
 
 const auditFormMount = document.getElementById("auditFormMount");
 const auditBranchName = document.getElementById("auditBranchName");
@@ -59,11 +73,19 @@ let activeView = "home";
 /** @type {string[][] | null} */
 let stockGrid = null;
 
+/** @type {string[][] | null} */
+let dayEndGrid = null;
+
+/** Puan yazılınca sonraki puan kutusuna atlamak için zamanlayıcılar */
+const auditEarnedNavTimers = new WeakMap();
+
 let currentGrid = null;
 let currentMeta = {
   suggestedBaseName: "paste",
   sourceType: "paste",
 };
+
+const DAY_END_HEADERS = ["Açıklama", "Adet", "Tutar", "OSF"];
 
 const MONTHLY_STOCK_HEADERS = [
   "STOK ADI",
@@ -132,8 +154,39 @@ function setStatusStock(text) {
   statusBoxStock.textContent = text;
 }
 
+function setStatusDayEnd(text) {
+  statusBoxDayEnd.textContent = text;
+}
+
 function setStatusAudit(text) {
   statusBoxAudit.textContent = text;
+}
+
+const appToast = document.getElementById("appToast");
+let appToastTimer = null;
+
+/**
+ * Uygulama içi kısa bilgi kutusu; birkaç saniye sonra kapanır.
+ * @param {"success"|"info"} kind
+ */
+function showAppToast(message, kind = "success") {
+  if (!appToast) return;
+  const text = String(message || "").trim().slice(0, 280);
+  if (!text) return;
+  appToast.textContent = text;
+  appToast.classList.remove("appToast--info", "appToast--success", "appToast--visible");
+  appToast.classList.add(kind === "info" ? "appToast--info" : "appToast--success");
+  appToast.hidden = false;
+  clearTimeout(appToastTimer);
+  requestAnimationFrame(() => {
+    appToast.classList.add("appToast--visible");
+  });
+  appToastTimer = setTimeout(() => {
+    appToast.classList.remove("appToast--visible");
+    setTimeout(() => {
+      appToast.hidden = true;
+    }, 220);
+  }, 3000);
 }
 
 function formatDate(iso) {
@@ -148,14 +201,17 @@ function emptyCellToString(value) {
 function showView(view) {
   activeView = view;
   viewHome.classList.toggle("hidden", view !== "home");
+  viewDayEnd.classList.toggle("hidden", view !== "dayEnd");
   viewStock.classList.toggle("hidden", view !== "stock");
   viewAudit.classList.toggle("hidden", view !== "audit");
   viewOther.classList.toggle("hidden", view !== "other");
 
-  targetBar.classList.toggle("hidden", view !== "other");
+  targetBar.classList.toggle("hidden", view !== "other" && view !== "dayEnd");
 
   if (view === "home") {
     topbarSubtitle.textContent = "Belge tipi seçin";
+  } else if (view === "dayEnd") {
+    topbarSubtitle.textContent = "Gün sonu özet raporu";
   } else if (view === "stock") {
     topbarSubtitle.textContent = "Aylık stok kapanış";
   } else if (view === "audit") {
@@ -219,6 +275,28 @@ function dropCompletelyEmptyRows(rows) {
   return rows.filter((row) => row.some((c) => c !== ""));
 }
 
+/**
+ * Sağdan tüm satırlarda boş olan sütunları kırp (kopyalanan tabloda fazladan boş
+ * sütun kalırsa Excel’de dikey boş kolon oluşmasın).
+ */
+function trimTrailingEmptyColumns(rows) {
+  if (!rows.length) return rows;
+  const maxLen = rows.reduce((m, r) => Math.max(m, r.length), 0);
+  let end = maxLen;
+  while (end > 0) {
+    const ci = end - 1;
+    const allEmpty = rows.every((row) => {
+      const v = row[ci];
+      if (v == null || v === "") return true;
+      return String(v).trim() === "";
+    });
+    if (!allEmpty) break;
+    end -= 1;
+  }
+  if (end === maxLen) return rows;
+  return rows.map((row) => row.slice(0, end));
+}
+
 function prependMonthlyHeaders(rows) {
   return [MONTHLY_STOCK_HEADERS.slice(), ...rows];
 }
@@ -229,7 +307,20 @@ function processMonthlyStockRaw(rawGrid) {
   const noLeadingEmptyCol = removeFirstColumnIfAllEmpty(padded);
   const dataOnly = dropCompletelyEmptyRows(noLeadingEmptyCol);
   if (!dataOnly.length) return [];
-  return prependMonthlyHeaders(dataOnly);
+  return trimTrailingEmptyColumns(prependMonthlyHeaders(dataOnly));
+}
+
+function prependDayEndHeaders(rows) {
+  return [DAY_END_HEADERS.slice(), ...rows];
+}
+
+function processDayEndRaw(rawGrid) {
+  const padded = gridToRowsRaw(rawGrid);
+  if (!padded.length) return [];
+  const noLeadingEmptyCol = removeFirstColumnIfAllEmpty(padded);
+  const dataOnly = dropCompletelyEmptyRows(noLeadingEmptyCol);
+  if (!dataOnly.length) return [];
+  return trimTrailingEmptyColumns(prependDayEndHeaders(dataOnly));
 }
 
 function renderPreviewTable(grid, container) {
@@ -359,6 +450,30 @@ async function handleParsedStockGrid(rawGrid) {
   updateStockFileHint();
 }
 
+async function handleParsedDayEndGrid(rawGrid) {
+  const processed = processDayEndRaw(rawGrid);
+  if (!processed.length || processed.length < 2) {
+    dayEndGrid = null;
+    dayEndPreviewCard.classList.add("hidden");
+    dayEndPreviewMeta.textContent = "";
+    setStatusDayEnd(UI_TEXT.gridEmpty);
+    updateDayEndSendEnabled();
+    return;
+  }
+
+  dayEndGrid = processed;
+  const dataRows = processed.length - 1;
+  const cols = processed[0].length;
+  dayEndPreviewMeta.textContent = `Başlık + ${dataRows} veri satırı, ${cols} sütun`;
+  renderPreviewTable(processed, dayEndPreviewWrap);
+  dayEndPreviewCard.classList.remove("hidden");
+  setStatusDayEnd(
+    "Tablo hazır. Masaüstüne kaydedin veya hedef klasöre gönderin.",
+  );
+  updateDayEndFileHint();
+  updateDayEndSendEnabled();
+}
+
 async function parseDroppedFile(file) {
   const maxBytes = 25 * 1024 * 1024;
   if (file.size > maxBytes) {
@@ -373,15 +488,58 @@ async function parseDroppedFile(file) {
   });
 }
 
-function getSelectedMonthUpperLabel() {
+/** Ay seçimine göre dosya adındaki yıl (ör. Ocak’ta varsayılan Ar → önceki yıl). */
+function yearForSelectedStockMonth(monthIdx, ref = new Date()) {
+  const curM = ref.getMonth();
+  const y = ref.getFullYear();
+  if (monthIdx > curM) return y - 1;
+  return y;
+}
+
+function getStockFileSlug() {
   const idx = parseInt(stockMonthSelect.value, 10);
-  if (Number.isNaN(idx) || idx < 0 || idx > 11) return "RAPOR";
-  return TURKISH_MONTHS[idx].toLocaleUpperCase("tr-TR");
+  if (Number.isNaN(idx) || idx < 0 || idx > 11) return "stok-kapanis";
+  const year = yearForSelectedStockMonth(idx);
+  const mon = TURKISH_MONTHS[idx].toLocaleLowerCase("tr-TR");
+  return `${mon}-${year}-stok-kapanis`;
 }
 
 function updateStockFileHint() {
-  const label = getSelectedMonthUpperLabel();
-  stockFileHint.textContent = `Dosya adı: ${label} STOK KAPANIŞ.xlsx`;
+  stockFileHint.textContent = `Dosya adı: ${getStockFileSlug()}.xlsx`;
+}
+
+function getPreviousDayISO(ref = new Date()) {
+  const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** date input yyyy-mm-dd → dd-mm-yyyy-gun-sonu */
+function formatDayEndFileStem(isoDate) {
+  const raw = String(isoDate || "").trim();
+  const parts = raw.split("-");
+  if (parts.length !== 3) return "gun-sonu";
+  const [y, m, d] = parts;
+  if (!y || !m || !d) return "gun-sonu";
+  return `${d}-${m}-${y}-gun-sonu`;
+}
+
+function applyDefaultDayEndDate() {
+  if (!daySummaryDate) return;
+  daySummaryDate.value = getPreviousDayISO();
+}
+
+function updateDayEndFileHint() {
+  if (!dayEndFileHint || !daySummaryDate) return;
+  dayEndFileHint.textContent = `Dosya adı: ${formatDayEndFileStem(daySummaryDate.value)}.xlsx`;
+}
+
+function updateDayEndSendEnabled() {
+  const hasTarget = targetPathLabel.dataset.hasTarget === "1";
+  const hasGrid = Boolean(dayEndGrid && dayEndGrid.length >= 2);
+  if (sendDayEnd) sendDayEnd.disabled = !(hasTarget && hasGrid);
 }
 
 function getAuditFormDef() {
@@ -406,10 +564,15 @@ function auditCommentId(sectionKey, index) {
 function collectAuditAll() {
   const form = getAuditFormDef();
   if (!form) {
-    return { detailRows: [], errors: ["Form tanımı yüklenemedi."], sums: { kalite: 0, servis: 0, temizlik: 0 } };
+    return {
+      detailRows: [],
+      errors: [{ message: "Form tanımı yüklenemedi.", earnedEl: null }],
+      sums: { kalite: 0, servis: 0, temizlik: 0 },
+    };
   }
 
   const detailRows = [];
+  /** @type {{ message: string, earnedEl: HTMLElement | null }[]} */
   const errors = [];
   const sums = { kalite: 0, servis: 0, temizlik: 0 };
 
@@ -424,14 +587,18 @@ function collectAuditAll() {
         commentEl && commentEl.value ? String(commentEl.value).trim() : "";
 
       if (!Number.isFinite(earned)) {
-        errors.push(`${section.title} #${globalNo}: geçersiz puan`);
+        errors.push({
+          message: `${section.title} #${globalNo}: geçersiz puan`,
+          earnedEl,
+        });
         globalNo += 1;
         return;
       }
       if (earned < 0 || earned > item.max) {
-        errors.push(
-          `${section.title} #${globalNo}: puan 0–${item.max} olmalı (girilen: ${earned})`
-        );
+        errors.push({
+          message: `${section.title} #${globalNo}: puan 0–${item.max} olmalı (girilen: ${earned})`,
+          earnedEl,
+        });
         globalNo += 1;
         return;
       }
@@ -445,20 +612,25 @@ function collectAuditAll() {
   return { detailRows, errors, sums };
 }
 
+function auditErrorText(err) {
+  if (typeof err === "string") return err;
+  return err?.message ?? "";
+}
+
 function updateAuditSummaryFromSums(sums, errors) {
   const k = sums.kalite ?? 0;
   const s = sums.servis ?? 0;
   const t = sums.temizlik ?? 0;
   const totalEarned = k + s + t;
 
-  auditSumKalite.textContent = `${k} / ${MAX_QUALITY}`;
-  auditSumServis.textContent = `${s} / ${MAX_SERVICE}`;
-  auditSumTemizlik.textContent = `${t} / ${MAX_CLEAN}`;
+  auditSumKalite.textContent = `${Number(k.toFixed(2))} / ${MAX_QUALITY}`;
+  auditSumServis.textContent = `${Number(s.toFixed(2))} / ${MAX_SERVICE}`;
+  auditSumTemizlik.textContent = `${Number(t.toFixed(2))} / ${MAX_CLEAN}`;
 
   if (errors.length) {
     auditPercent.textContent = `Genel yüzde: — (${errors.length} satır hatalı)`;
     auditLetter.textContent = "—";
-    setStatusAudit(errors[0]);
+    setStatusAudit(auditErrorText(errors[0]));
     return null;
   }
 
@@ -473,6 +645,38 @@ function updateAuditSummaryFromSums(sums, errors) {
 function recalcAuditUi() {
   const { sums, errors } = collectAuditAll();
   updateAuditSummaryFromSums(sums, errors);
+}
+
+/** Yorumu atla: bir sonraki sorunun puan kutusu (veya bir sonraki bölümün ilki). */
+function focusNextAuditEarnedInput(currentEarned) {
+  const row = currentEarned.closest(".auditQuestionRow");
+  if (!row) return;
+  let nextRow = row.nextElementSibling;
+  while (nextRow && !nextRow.classList.contains("auditQuestionRow")) {
+    nextRow = nextRow.nextElementSibling;
+  }
+  if (nextRow) {
+    const nextEarned = nextRow.querySelector('input[type="number"]');
+    if (nextEarned) {
+      nextEarned.focus();
+      try {
+        nextEarned.select();
+      } catch (_) {}
+      return;
+    }
+  }
+  const card = row.closest(".auditSectionCard");
+  const nextCard = card?.nextElementSibling;
+  if (nextCard && nextCard.classList.contains("auditSectionCard")) {
+    const firstRow = nextCard.querySelector(".auditQuestionRow");
+    const ne = firstRow?.querySelector('input[type="number"]');
+    if (ne) {
+      ne.focus();
+      try {
+        ne.select();
+      } catch (_) {}
+    }
+  }
 }
 
 function renderOperationAuditForm() {
@@ -505,10 +709,10 @@ function renderOperationAuditForm() {
       const earned = document.createElement("input");
       earned.type = "number";
       earned.min = "0";
-      earned.max = String(item.max);
-      earned.step = "0.5";
+      earned.step = "any";
       earned.id = auditEarnedId(section.key, idx);
       earned.placeholder = "Puan";
+      earned.inputMode = "decimal";
 
       const comment = document.createElement("input");
       comment.type = "text";
@@ -517,7 +721,7 @@ function renderOperationAuditForm() {
 
       const hint = document.createElement("div");
       hint.className = "fieldHint";
-      hint.textContent = `0–${item.max}`;
+      hint.textContent = `0–${item.max} (ör. 4,8)`;
 
       inputs.appendChild(earned);
       inputs.appendChild(comment);
@@ -528,7 +732,30 @@ function renderOperationAuditForm() {
       row.appendChild(inputs);
       card.appendChild(row);
 
-      earned.addEventListener("input", recalcAuditUi);
+      const scheduleJumpToNextEarned = () => {
+        const prev = auditEarnedNavTimers.get(earned);
+        if (prev) clearTimeout(prev);
+        const t = setTimeout(() => {
+          auditEarnedNavTimers.delete(earned);
+          if (
+            document.activeElement === earned &&
+            document.body.contains(earned)
+          ) {
+            focusNextAuditEarnedInput(earned);
+          }
+        }, 100);
+        auditEarnedNavTimers.set(earned, t);
+      };
+
+      earned.addEventListener("input", () => {
+        recalcAuditUi();
+        scheduleJumpToNextEarned();
+      });
+      earned.addEventListener("blur", () => {
+        const prev = auditEarnedNavTimers.get(earned);
+        if (prev) clearTimeout(prev);
+        auditEarnedNavTimers.delete(earned);
+      });
     });
 
     auditFormMount.appendChild(card);
@@ -563,12 +790,12 @@ function buildAuditOzetSheet(meta, agg) {
     [],
     ["DEĞERLENDİRME ÖZETİ"],
     ["Kategori", "Maksimum", "Alınan", "Bölüm yüzdesi"],
-    ["Kalite", MAX_QUALITY, agg.k, `${pk}%`],
-    ["Servis", MAX_SERVICE, agg.s, `${ps}%`],
-    ["Temizlik ve güvenlik", MAX_CLEAN, agg.t, `${pt}%`],
+    ["Kalite", MAX_QUALITY, Number(agg.k.toFixed(2)), `${pk}%`],
+    ["Servis", MAX_SERVICE, Number(agg.s.toFixed(2)), `${ps}%`],
+    ["Temizlik ve güvenlik", MAX_CLEAN, Number(agg.t.toFixed(2)), `${pt}%`],
     [],
     ["Toplam maksimum", MAX_TOTAL],
-    ["Toplam alınan", agg.totalEarned],
+    ["Toplam alınan", Number(agg.totalEarned.toFixed(2))],
     ["Genel yüzde", Number(agg.percent.toFixed(4))],
     ["Not (skala)", agg.letter],
     [],
@@ -608,6 +835,19 @@ async function initOtherView() {
   }
 }
 
+async function initDayEndView() {
+  const config = await window.bridgeApi.getConfig();
+  if (config.hasTarget) {
+    targetPathLabel.textContent = config.targetPath;
+    targetPathLabel.dataset.hasTarget = "1";
+  } else {
+    targetPathLabel.textContent = UI_TEXT.targetNotSelected;
+    targetPathLabel.dataset.hasTarget = "0";
+  }
+  updateCounter(config);
+  updateDayEndSendEnabled();
+}
+
 /** Rapor genelde ay bittikten sonra; varsayılan = bir önceki ay (Ocak → Aralık). */
 function getPreviousMonthIndex(referenceDate = new Date()) {
   const m = referenceDate.getMonth();
@@ -631,6 +871,18 @@ function initMonthSelect() {
   });
   stockMonthSelect.addEventListener("change", updateStockFileHint);
 }
+
+btnModeDayEnd.addEventListener("click", async () => {
+  dayEndGrid = null;
+  dayEndPreviewCard.classList.add("hidden");
+  dayEndPreviewWrap.innerHTML = "";
+  dayEndPreviewMeta.textContent = "";
+  setStatusDayEnd(UI_TEXT.statusReady);
+  showView("dayEnd");
+  applyDefaultDayEndDate();
+  updateDayEndFileHint();
+  await initDayEndView();
+});
 
 btnModeStock.addEventListener("click", () => {
   stockGrid = null;
@@ -660,6 +912,11 @@ btnModeOther.addEventListener("click", async () => {
   await initOtherView();
 });
 
+backFromDayEnd.addEventListener("click", () => {
+  showView("home");
+  setStatusDayEnd(UI_TEXT.statusReady);
+});
+
 backFromStock.addEventListener("click", () => {
   showView("home");
   setStatusStock(UI_TEXT.statusReady);
@@ -681,14 +938,73 @@ clearStock.addEventListener("click", () => {
   setStatusStock("Temizlendi. Yeniden yapıştırın.");
 });
 
+if (daySummaryDate) {
+  daySummaryDate.addEventListener("change", () => {
+    updateDayEndFileHint();
+  });
+}
+
+saveDayEndDesktop.addEventListener("click", async () => {
+  if (!dayEndGrid || dayEndGrid.length < 2) {
+    setStatusDayEnd("Önce tabloyu yapıştırın.");
+    return;
+  }
+  try {
+    const fileName = formatDayEndFileStem(daySummaryDate.value);
+    setStatusDayEnd("Kaydediliyor...");
+    const saved = await window.bridgeApi.saveXlsxDesktop({
+      grid: dayEndGrid,
+      fileName,
+      exportKind: "dayEndSummary",
+    });
+    setStatusDayEnd(`Masaüstüne kaydedildi: ${saved.fileName}`);
+    showAppToast(`Masaüstüne kaydedildi: ${saved.fileName}`);
+  } catch (err) {
+    setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
+  }
+});
+
+sendDayEnd.addEventListener("click", async () => {
+  if (!dayEndGrid || dayEndGrid.length < 2) {
+    setStatusDayEnd(UI_TEXT.sendNoData);
+    return;
+  }
+  setStatusDayEnd(UI_TEXT.sending);
+  try {
+    const result = await window.bridgeApi.sendGrid({
+      grid: dayEndGrid,
+      fileName: formatDayEndFileStem(daySummaryDate.value),
+      exportKind: "dayEndSummary",
+    });
+    if (result.deduped) {
+      setStatusDayEnd(UI_TEXT.deduped);
+      showAppToast("Bu tablo zaten gönderilmiş; yeni dosya yazılmadı.", "info");
+    } else {
+      setStatusDayEnd(`${UI_TEXT.sendSuccess}${result.fileName}`);
+      showAppToast(`Hedef klasöre kaydedildi: ${result.fileName}`);
+    }
+    await initDayEndView();
+  } catch (err) {
+    setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
+  }
+});
+
+clearDayEnd.addEventListener("click", () => {
+  dayEndGrid = null;
+  dayEndPreviewCard.classList.add("hidden");
+  dayEndPreviewWrap.innerHTML = "";
+  dayEndPreviewMeta.textContent = "";
+  setStatusDayEnd("Temizlendi. Yeniden yapıştırın.");
+  updateDayEndSendEnabled();
+});
+
 saveStockDesktop.addEventListener("click", async () => {
   if (!stockGrid || stockGrid.length < 2) {
     setStatusStock("Önce Excel tablosunu yapıştırın.");
     return;
   }
   try {
-    const label = getSelectedMonthUpperLabel();
-    const fileName = `${label} STOK KAPANIŞ`;
+    const fileName = getStockFileSlug();
     setStatusStock("Kaydediliyor...");
     const saved = await window.bridgeApi.saveXlsxDesktop({
       grid: stockGrid,
@@ -696,6 +1012,7 @@ saveStockDesktop.addEventListener("click", async () => {
       exportKind: "monthlyStock",
     });
     setStatusStock(`Masaüstüne kaydedildi: ${saved.fileName}`);
+    showAppToast(`Masaüstüne kaydedildi: ${saved.fileName}`);
   } catch (err) {
     setStatusStock(`${UI_TEXT.errorPrefix}${err.message}`);
   }
@@ -734,6 +1051,17 @@ bindDropZone(dropZoneStock, async (file) => {
   }
 });
 
+bindDropZone(dropZoneDayEnd, async (file) => {
+  if (activeView !== "dayEnd") return;
+  setStatusDayEnd(UI_TEXT.dropReading);
+  try {
+    const parsed = await parseDroppedFile(file);
+    await handleParsedDayEndGrid(parsed.grid);
+  } catch (err) {
+    setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
+  }
+});
+
 bindDropZone(dropZone, async (file) => {
   if (activeView !== "other") return;
   setStatus(UI_TEXT.dropReading);
@@ -751,7 +1079,16 @@ bindDropZone(dropZone, async (file) => {
 saveAuditDesktop.addEventListener("click", async () => {
   const { detailRows, errors, sums } = collectAuditAll();
   if (errors.length) {
-    setStatusAudit(`Kayıt yapılamadı: ${errors[0]}`);
+    const msg = auditErrorText(errors[0]);
+    setStatusAudit(`Kayıt yapılamadı: ${msg}`);
+    const firstBad = errors.find((e) => e && typeof e === "object" && e.earnedEl);
+    if (firstBad?.earnedEl) {
+      firstBad.earnedEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      firstBad.earnedEl.focus();
+      try {
+        firstBad.earnedEl.select();
+      } catch (_) {}
+    }
     return;
   }
 
@@ -783,6 +1120,10 @@ saveAuditDesktop.addEventListener("click", async () => {
   const ozet = buildAuditOzetSheet(meta, { k, s, t, totalEarned, percent, letter });
   const detayHeader = [["Bölüm", "No", "Soru", "Maksimum", "Puan", "Yorum"]];
   const detayData = detayHeader.concat(detailRows);
+  const eksikRows = detailRows.filter(
+    (row) => Number(row[4]) < Number(row[3]) - 1e-9,
+  );
+  const eksikWithHeader = detayHeader.concat(eksikRows);
 
   try {
     setStatusAudit("Kaydediliyor...");
@@ -791,12 +1132,17 @@ saveAuditDesktop.addEventListener("click", async () => {
     const fname = `Operasyon_Denetim_${safeBranch.replace(/[<>:"/\\|?*]/g, "_")}`;
     await window.bridgeApi.saveXlsxDesktop({
       fileName: fname,
-      sheets: [
-        { name: "Özet", data: ozet },
-        { name: "Detay", data: detayData },
-      ],
+      exportKind: "auditWorkbook",
+      auditBook: {
+        ozet,
+        detayWithHeader: detayData,
+        eksikWithHeader,
+      },
     });
-    setStatusAudit("Masaüstüne Excel kaydedildi (Özet + Detay).");
+    setStatusAudit(
+      "Masaüstüne kaydedildi: Özet, Detay ve Tam puan alınmayan sayfaları.",
+    );
+    showAppToast("Denetim Excel’i kaydedildi (3 sayfa).");
   } catch (err) {
     setStatusAudit(`${UI_TEXT.errorPrefix}${err.message}`);
   }
@@ -812,9 +1158,16 @@ pickTargetBtn.addEventListener("click", async () => {
     targetPathLabel.dataset.hasTarget = "1";
     updateCounter(config);
     updateSendEnabled();
+    updateDayEndSendEnabled();
     setStatus(UI_TEXT.targetUpdated);
+    if (activeView === "dayEnd") {
+      setStatusDayEnd(UI_TEXT.targetUpdated);
+    }
   } catch (err) {
     setStatus(`${UI_TEXT.errorPrefix}${err.message}`);
+    if (activeView === "dayEnd") {
+      setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
+    }
   }
 });
 
@@ -841,8 +1194,10 @@ sendNowBtn.addEventListener("click", async () => {
 
     if (result.deduped) {
       setStatus(UI_TEXT.deduped);
+      showAppToast("Bu içerik zaten gönderilmiş; yeni dosya yazılmadı.", "info");
     } else {
       setStatus(`${UI_TEXT.sendSuccess}${result.fileName}`);
+      showAppToast(`Hedef klasöre kaydedildi: ${result.fileName}`);
     }
     const config = await window.bridgeApi.getConfig();
     updateCounter(config);
@@ -874,6 +1229,13 @@ window.addEventListener(
         return;
       }
 
+      if (activeView === "dayEnd") {
+        event.preventDefault();
+        setStatusDayEnd(UI_TEXT.pasteCleaning);
+        await handleParsedDayEndGrid(grid);
+        return;
+      }
+
       if (activeView === "other") {
         event.preventDefault();
         setStatus(UI_TEXT.pasteCleaning);
@@ -882,6 +1244,8 @@ window.addEventListener(
     } catch (err) {
       if (activeView === "stock") {
         setStatusStock(`${UI_TEXT.errorPrefix}${err.message}`);
+      } else if (activeView === "dayEnd") {
+        setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
       } else if (activeView === "other") {
         setStatus(`${UI_TEXT.errorPrefix}${err.message}`);
       }
@@ -893,6 +1257,7 @@ window.addEventListener(
 window.bridgeApi.onStatus((payload) => {
   if (!payload?.message) return;
   if (activeView === "other") setStatus(payload.message);
+  if (activeView === "dayEnd") setStatusDayEnd(payload.message);
 });
 
 function init() {
@@ -900,6 +1265,7 @@ function init() {
   showView("home");
   setStatus(UI_TEXT.statusReady);
   setStatusStock(UI_TEXT.statusReady);
+  setStatusDayEnd(UI_TEXT.statusReady);
   setStatusAudit(UI_TEXT.statusReady);
 }
 

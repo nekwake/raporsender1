@@ -30,7 +30,14 @@
       <div id="viewHome" class="view">
         <p class="subtitle">İşlemek istediğiniz belge tipini seçin.</p>
         <div class="modeGrid">
-          <button type="button" id="btnModeStock" class="modeBtn primary">
+          <button type="button" id="btnModeDayEnd" class="modeBtn primary">
+            <span class="modeBtnTitle">Gün sonu özet raporu</span>
+            <span class="modeBtnDesc"
+              >Excel yapıştır; hedef klasöre gönder veya masaüstüne
+              kaydet</span
+            >
+          </button>
+          <button type="button" id="btnModeStock" class="modeBtn secondary">
             <span class="modeBtnTitle">Aylık Stok Kapanış</span>
             <span class="modeBtnDesc"
               >Excel yapıştır, sütun başlıkları eklenir, masaüstüne
@@ -50,6 +57,57 @@
             >
           </button>
         </div>
+      </div>
+
+      <!-- Gün sonu özet raporu -->
+      <div id="viewDayEnd" class="view hidden">
+        <div class="viewHead">
+          <button type="button" id="backFromDayEnd" class="ghost">← Geri</button>
+        </div>
+        <p class="subtitle">
+          Gün sonu tablosunu Excel’den kopyalayıp <strong>Ctrl+V</strong> ile
+          yapıştırın. İlk boş sütun kaldırılır, tamamen boş satırlar silinir;
+          üstte sabit başlıklar eklenir (Açıklama, Adet, Tutar, OSF).
+        </p>
+
+        <section class="card">
+          <h2>Yapıştır</h2>
+          <div class="dropZone" id="dropZoneDayEnd" tabindex="0">
+            <div class="dropIcon">📥</div>
+            <div class="dropText">
+              <div class="dropTitle">Ctrl+V ile yapıştırın</div>
+              <div class="dropSub">
+                veya Excel/Csv dosyasını buraya bırakın — rapor tarihi aşağıdan
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Rapor tarihi (dosya adı)</h2>
+          <div class="row">
+            <label class="inlineLabel" for="daySummaryDate">Tarih</label>
+            <input type="date" id="daySummaryDate" class="selectInput" />
+          </div>
+          <div class="row" style="margin-top: 10px">
+            <button type="button" id="saveDayEndDesktop" class="primary">
+              Masaüstüne kaydet
+            </button>
+            <button type="button" id="sendDayEnd" class="secondary">
+              Gönder
+            </button>
+            <button type="button" id="clearDayEnd" class="ghost">Temizle</button>
+          </div>
+          <div id="dayEndFileHint" class="helperBox"></div>
+        </section>
+
+        <section id="dayEndPreviewCard" class="card hidden">
+          <h2>Önizleme</h2>
+          <div id="dayEndPreviewMeta" class="muted"></div>
+          <div id="dayEndPreviewWrap" class="tableWrap"></div>
+        </section>
+
+        <div id="statusBoxDayEnd" class="status">Hazır.</div>
       </div>
 
       <!-- Monthly stock closing -->
@@ -238,6 +296,8 @@
         </section>
       </div>
     </main>
+
+    <div id="appToast" class="appToast" role="status" aria-live="polite" hidden></div>
 
     <script src="./audit-form-data.js"></script>
     <script src="./renderer.js"></script>
