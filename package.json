@@ -23,7 +23,6 @@
   "homepage": "https://github.com/nekwake/raporsender1#readme",
   "dependencies": {
     "chokidar": "^5.0.0",
-    "electron": "^41.1.0",
     "fs-extra": "^11.3.4",
     "pdf-parse": "^2.4.5",
     "xlsx": "^0.18.5"
@@ -38,6 +37,7 @@
       "index.html",
       "styles.css",
       "assets/**",
+      "node_modules/**",
       "package.json"
     ],
     "mac": {
@@ -52,6 +52,7 @@
     }
   },
   "devDependencies": {
+    "electron": "^41.1.0",
     "electron-builder": "^26.8.1"
   }
 }
