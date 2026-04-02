@@ -155,6 +155,10 @@ li {
   gap: 12px;
 }
 
+.targetBar.hidden {
+  display: none;
+}
+
 .targetMeta {
   display: flex;
   flex-direction: column;
@@ -245,4 +249,242 @@ li {
   font-size: 12px;
   vertical-align: top;
   white-space: nowrap;
+}
+
+.view {
+  display: block;
+}
+
+/* Beats `.view { display: block }` (two classes vs one) */
+.view.hidden {
+  display: none;
+}
+
+.viewHead {
+  margin-bottom: 12px;
+}
+
+.modeGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modeBtn {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.modeBtn:hover {
+  transform: translateY(-2px);
+  border-color: #2563eb;
+}
+
+.modeBtn.primary {
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.modeBtn.primary .modeBtnDesc {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.modeBtn.secondary {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.modeBtnTitle {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.modeBtnDesc {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.selectInput {
+  flex: 1;
+  max-width: 280px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inlineLabel {
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 36px;
+}
+
+.auditGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auditGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.auditGrid input {
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.auditResultCard {
+  text-align: center;
+}
+
+.auditPercent {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.auditLetter {
+  font-size: 72px;
+  font-weight: 800;
+  color: #2563eb;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.auditRefCard .auditRefWrap {
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.auditRefImg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.auditMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.auditMetaGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.auditMetaGrid input {
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.stickySummary {
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+}
+
+.auditSummaryRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.auditSumLine {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.auditFormMount {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auditSectionCard h2 {
+  font-size: 16px;
+  color: #1e40af;
+  border-bottom: 2px solid #bfdbfe;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.auditQuestionRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+@media (max-width: 720px) {
+  .auditQuestionRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.auditQText {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #0f172a;
+}
+
+.auditQMax {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  padding-top: 8px;
+}
+
+.auditQInputs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.auditQInputs input[type="number"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.auditQInputs input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.auditQInputs .fieldHint {
+  font-size: 11px;
+  color: #94a3b8;
 }

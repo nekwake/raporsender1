@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("bridgeApi", {
   chooseTargetFolder: () => ipcRenderer.invoke("choose-target-folder"),
   parseFileBuffer: (payload) => ipcRenderer.invoke("parse-file-buffer", payload),
   sendGrid: (payload) => ipcRenderer.invoke("send-grid", payload),
+  saveXlsxDesktop: (payload) => ipcRenderer.invoke("save-xlsx-desktop", payload),
   getLastSent: () => ipcRenderer.invoke("last-sent"),
   onStatus: (callback) => {
     ipcRenderer.on("status", (_event, payload) => callback(payload));

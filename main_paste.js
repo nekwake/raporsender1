@@ -1,10 +1,12 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const path = require("path");
 const os = require("os");
 const fs = require("fs-extra");
 const crypto = require("crypto");
+const { autoUpdater } = require("electron-updater");
 
 const xlsx = require("xlsx");
+const ExcelJS = require("exceljs");
 const pdfParse = require("pdf-parse");
 
 const APP_DIR = app.getPath("userData");
@@ -28,6 +30,12 @@ function sanitizeFileBaseName(baseName) {
   const name = String(baseName || "rapor");
   // Keep letters, numbers, underscore, dash. Replace others.
   return name.replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "rapor";
+}
+
+/** Allow Turkish and most printable chars; strip Windows-forbidden path characters */
+function sanitizeDesktopFileName(name) {
+  const base = String(name || "dosya").trim();
+  return base.replace(/[<>:"/\\|?*\x00-\x1f]/g, " ").replace(/\s+/g, " ").trim() || "dosya";
 }
 
 function fileExists(p) {
@@ -122,6 +130,51 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+}
+
+/** GitHub Releases üzerinden; yalnızca paketlenmiş kurulumda çalışır. */
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-available", (info) => {
+    sendStatus(`Yeni sürüm: v${info.version} indiriliyor…`, "info");
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    sendStatus(
+      `Sürüm ${info.version} hazır. Kapatıp açınca güncellenir.`,
+      "success",
+    );
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const dlgOpts = {
+      type: "info",
+      title: "Assistant — güncelleme",
+      message: `Sürüm ${info.version} indirildi.`,
+      detail:
+        "Güncelleme, uygulamayı kapattığınızda uygulanır; tekrar açtığınızda yeni sürüm çalışır.",
+      buttons: ["Tamam"],
+      defaultId: 0,
+    };
+    (win ? dialog.showMessageBox(win, dlgOpts) : dialog.showMessageBox(dlgOpts)).catch(
+      () => {},
+    );
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("[autoUpdater]", err?.message || err);
+  });
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error("[checkForUpdates]", err?.message || err);
+  });
+
+  const sixHoursMs = 6 * 60 * 60 * 1000;
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }, sixHoursMs);
 }
 
 ipcMain.handle("get-config", async () => {
@@ -239,9 +292,152 @@ ipcMain.handle("last-sent", async () => {
   }));
 });
 
+function uniqueSheetName(name, usedNames) {
+  let n = String(name || "Sheet")
+    .replace(/[[\]:/?*\\]/g, " ")
+    .trim()
+    .slice(0, 31);
+  if (!n) n = "Sheet";
+  let candidate = n;
+  let i = 1;
+  while (usedNames.has(candidate)) {
+    const suffix = `_${i++}`;
+    candidate = `${n}`.slice(0, 31 - suffix.length) + suffix;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
+
+/**
+ * Aylık stok kapanışı: xlsx (SheetJS) stilleri yazamaz; ExcelJS ile sınır, başlık rengi ve sütun genişliği.
+ */
+async function writeMonthlyStockXlsxBuffer(grid) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Assistant";
+  const ws = wb.addWorksheet("Stok Kapanış");
+
+  const numRows = grid.length;
+  const numCols = grid.reduce(
+    (m, r) => Math.max(m, Array.isArray(r) ? r.length : 0),
+    0,
+  );
+
+  const headerFill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFC62828" },
+  };
+  const headerFont = { bold: true, color: { argb: "FFFFFFFF" } };
+  const thin = { style: "thin", color: { argb: "FF000000" } };
+  const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
+
+  for (let ridx = 0; ridx < numRows; ridx++) {
+    const rowArr = grid[ridx];
+    const padded = [];
+    for (let c = 0; c < numCols; c++) {
+      const v = rowArr && rowArr[c];
+      padded.push(v === "" || v == null ? "" : v);
+    }
+    const row = ws.addRow(padded);
+    if (ridx === 0) row.height = 22;
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = allBorders;
+      if (ridx === 0) {
+        cell.fill = headerFill;
+        cell.font = headerFont;
+      }
+      cell.alignment = { vertical: "middle", wrapText: true };
+    });
+  }
+
+  for (let c = 1; c <= numCols; c++) {
+    let maxLen = 8;
+    for (let ridx = 0; ridx < numRows; ridx++) {
+      const rowArr = grid[ridx];
+      const v = rowArr && rowArr[c - 1];
+      const s = v == null ? "" : String(v);
+      if (s.length > maxLen) maxLen = s.length;
+    }
+    const w = Math.min(Math.max(maxLen * 0.92 + 2.2, 12), 48);
+    ws.getColumn(c).width = w;
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf);
+}
+
+ipcMain.handle("save-xlsx-desktop", async (_event, payload) => {
+  const { grid, fileName, sheets, exportKind } = payload || {};
+
+  let outBuffer;
+
+  if (exportKind === "monthlyStock") {
+    if (!Array.isArray(grid) || !grid.length) {
+      throw new Error("Kaydedilecek tablo boş.");
+    }
+    outBuffer = await writeMonthlyStockXlsxBuffer(grid);
+  } else {
+    const wb = xlsx.utils.book_new();
+    let hasData = false;
+
+    if (Array.isArray(sheets) && sheets.length > 0) {
+      const used = new Set();
+      for (let i = 0; i < sheets.length; i++) {
+        const s = sheets[i];
+        const data = s && Array.isArray(s.data) ? s.data : [];
+        if (!data.length) continue;
+        hasData = true;
+        const nm = uniqueSheetName(s.name || `Sayfa${i + 1}`, used);
+        const ws = xlsx.utils.aoa_to_sheet(data);
+        xlsx.utils.book_append_sheet(wb, ws, nm);
+      }
+    }
+
+    if (!hasData && Array.isArray(grid) && grid.length) {
+      const ws = xlsx.utils.aoa_to_sheet(grid);
+      xlsx.utils.book_append_sheet(wb, ws, "Sheet1");
+      hasData = true;
+    }
+
+    if (!hasData) {
+      throw new Error("Kaydedilecek tablo boş.");
+    }
+
+    outBuffer = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+  }
+
+  let base = sanitizeDesktopFileName(fileName || "cikti");
+  if (!base.toLowerCase().endsWith(".xlsx")) {
+    base = `${base}.xlsx`;
+  }
+
+  const desktop = app.getPath("desktop");
+  await fs.ensureDir(desktop);
+
+  let outPath = path.join(desktop, base);
+  let attempt = 1;
+  const stem = base.replace(/\.xlsx$/i, "");
+  while (fileExists(outPath) && attempt < 500) {
+    outPath = path.join(desktop, `${stem}_${attempt}.xlsx`);
+    attempt += 1;
+  }
+
+  await fs.writeFile(outPath, outBuffer);
+
+  const writtenName = path.basename(outPath);
+  sendStatus(`Masaüstüne kaydedildi: ${writtenName}`, "success");
+  return { filePath: outPath, fileName: writtenName };
+});
+
 app.whenReady().then(async () => {
+  // Windows/Linux: default menü çubuğu (File / View / DevTools) kaldırılır.
+  if (process.platform !== "darwin") {
+    Menu.setApplicationMenu(null);
+  }
+
   await loadState();
   createWindow();
+  setupAutoUpdater();
 
   // Optional usability improvement:
   // If state is empty and default target exists, keep it empty until user picks,

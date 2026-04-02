@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bridge V1</title>
+    <title>Assistant</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="./assets/icon.png" />
   </head>
@@ -12,11 +12,11 @@
       <div class="topbar-title">
         <span class="brand-dot"></span>
         <div>
-          <h1>Bridge V1</h1>
-          <p>Excel/PDF tablo hazırlama ve aktarım</p>
+          <h1>Assistant</h1>
+          <p id="topbarSubtitle">Belge tipi seçin</p>
         </div>
       </div>
-      <div class="targetBar">
+      <div id="targetBar" class="targetBar hidden">
         <div class="targetMeta">
           <div class="targetLabel">Hedef klasör</div>
           <div id="targetPathLabel" class="targetPath">Seçilmedi</div>
@@ -26,51 +26,220 @@
     </header>
 
     <main class="container">
-      <p class="subtitle">
-        Excel’den tabloyu kopyalayıp buraya yapıştırın (Ctrl+V) veya dosyayı sürükleyip bırakın. Program, boş satır/sütunları temizler ve merkeze-gider formatında Excel olarak kaydeder.
-      </p>
+      <!-- Home: document type selection -->
+      <div id="viewHome" class="view">
+        <p class="subtitle">İşlemek istediğiniz belge tipini seçin.</p>
+        <div class="modeGrid">
+          <button type="button" id="btnModeStock" class="modeBtn primary">
+            <span class="modeBtnTitle">Aylık Stok Kapanış</span>
+            <span class="modeBtnDesc"
+              >Excel yapıştır, sütun başlıkları eklenir, masaüstüne
+              kaydedilir</span
+            >
+          </button>
+          <button type="button" id="btnModeAudit" class="modeBtn secondary">
+            <span class="modeBtnTitle">Operasyon Denetim Raporu</span>
+            <span class="modeBtnDesc"
+              >Puanları girin, not hesaplayın, masaüstüne kaydedin</span
+            >
+          </button>
+          <button type="button" id="btnModeOther" class="modeBtn ghost">
+            <span class="modeBtnTitle">Diğer</span>
+            <span class="modeBtnDesc"
+              >Tablo temizleme ve hedef klasöre gönderim (mevcut akış)</span
+            >
+          </button>
+        </div>
+      </div>
 
-      <section id="dropCard" class="card">
-        <h2>Yapıştır / Sürükle</h2>
-        <div class="dropZone" id="dropZone" tabindex="0">
-          <div class="dropIcon">📥</div>
-          <div class="dropText">
-            <div class="dropTitle">Ctrl+V ile Excel tablosu yapıştırın</div>
-            <div class="dropSub">veya Excel/Csv/PDF dosyasını buraya bırakın.</div>
+      <!-- Monthly stock closing -->
+      <div id="viewStock" class="view hidden">
+        <div class="viewHead">
+          <button type="button" id="backFromStock" class="ghost">← Geri</button>
+        </div>
+        <p class="subtitle">
+          Excel’den stok tablosunu kopyalayıp yapıştırın. İlk boş sütun
+          kaldırılır; üstte sabit sütun başlıkları eklenir. Satır/sütun silme
+          yapılmaz.
+        </p>
+
+        <section class="card">
+          <h2>Yapıştır / Sürükle</h2>
+          <div class="dropZone" id="dropZoneStock" tabindex="0">
+            <div class="dropIcon">📥</div>
+            <div class="dropText">
+              <div class="dropTitle">Ctrl+V ile yapıştırın</div>
+              <div class="dropSub">veya Excel/Csv dosyasını buraya bırakın</div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div id="pasteHint" class="helperBox">
-          İpucu: Excel’de ilgili tabloyu seçip kopyalayın, sonra bu uygulamaya geçip `Ctrl+V` yapın.
-        </div>
-      </section>
-
-      <section id="previewCard" class="card hidden">
-        <div class="previewHead">
-          <div>
-            <h2>Önizleme</h2>
-            <div id="previewMeta" class="muted"></div>
+        <section class="card">
+          <h2>Kayıt ayı</h2>
+          <div class="row">
+            <label class="inlineLabel" for="stockMonthSelect">Ay</label>
+            <select id="stockMonthSelect" class="selectInput"></select>
           </div>
-          <button id="clearNow" class="ghost">Temizle</button>
-        </div>
-        <div id="previewTableWrap" class="tableWrap"></div>
-      </section>
+          <div class="row" style="margin-top: 10px">
+            <button type="button" id="saveStockDesktop" class="primary">
+              Masaüstüne kaydet
+            </button>
+            <button type="button" id="clearStock" class="ghost">Temizle</button>
+          </div>
+          <div id="stockFileHint" class="helperBox"></div>
+        </section>
 
-      <section class="card">
-        <div class="row">
-          <button id="sendNow" class="primary">Gönder</button>
-          <button id="infoNow" class="secondary" disabled>Bilgi ver</button>
-          <span id="counter" class="muted"></span>
-        </div>
-        <div id="statusBox" class="status">Hazır.</div>
-      </section>
+        <section id="stockPreviewCard" class="card hidden">
+          <h2>Önizleme</h2>
+          <div id="stockPreviewMeta" class="muted"></div>
+          <div id="stockPreviewWrap" class="tableWrap"></div>
+        </section>
 
-      <section class="card">
-        <h2>Son Gönderilenler</h2>
-        <ul id="sentList"></ul>
-      </section>
+        <div id="statusBoxStock" class="status">Hazır.</div>
+      </div>
+
+      <!-- Operation audit -->
+      <div id="viewAudit" class="view hidden">
+        <div class="viewHead">
+          <button type="button" id="backFromAudit" class="ghost">← Geri</button>
+        </div>
+        <p class="subtitle">
+          Aşağıdaki tüm maddeleri kağıt formdaki gibi doldurun. Alınan puanlar
+          otomatik toplanır; genel yüzde ve skala notu hesaplanır. Skala: A
+          %93–100, B %85–92.9, C %75–84.9, F %74.9 ve altı.
+        </p>
+
+        <section class="card auditRefCard">
+          <h2>Referans (orijinal form görseli)</h2>
+          <div class="auditRefWrap">
+            <img
+              class="auditRefImg"
+              src="./assets/operasyon-denetim-ornek.jpeg"
+              alt="Operasyon denetim formu örneği"
+              onerror="this.closest('.auditRefCard')?.remove()"
+            />
+          </div>
+          <p class="helperBox">
+            Görsel yoksa bu kutuyu yok sayın; tüm sorular listede yer alır.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Üst bilgiler</h2>
+          <div class="auditMetaGrid">
+            <label
+              >Şube adı<input
+                type="text"
+                id="auditBranchName"
+                autocomplete="organization"
+            /></label>
+            <label
+              >Şube müdürü<input
+                type="text"
+                id="auditBranchManager"
+                autocomplete="name"
+            /></label>
+            <label
+              >Bölge sorumlusu<input type="text" id="auditRegionalManager"
+            /></label>
+            <label
+              >Raporu hazırlayan<input type="text" id="auditPreparedBy"
+            /></label>
+            <label
+              >Ziyaret günü müdür<input type="text" id="auditVisitDayManager"
+            /></label>
+            <label
+              >Rapor tarihi<input type="date" id="auditReportDate"
+            /></label>
+          </div>
+        </section>
+
+        <section class="card auditResultCard stickySummary">
+          <h2>Özet sonuç</h2>
+          <div class="auditSummaryRow">
+            <div>
+              <div class="muted">Kalite (max 46)</div>
+              <div id="auditSumKalite" class="auditSumLine">0 / 46</div>
+            </div>
+            <div>
+              <div class="muted">Servis (max 56)</div>
+              <div id="auditSumServis" class="auditSumLine">0 / 56</div>
+            </div>
+            <div>
+              <div class="muted">Temizlik ve güvenlik (max 40)</div>
+              <div id="auditSumTemizlik" class="auditSumLine">0 / 40</div>
+            </div>
+          </div>
+          <div id="auditPercent" class="auditPercent muted">Genel yüzde: —</div>
+          <div id="auditLetter" class="auditLetter">—</div>
+        </section>
+
+        <div id="auditFormMount" class="auditFormMount"></div>
+
+        <section class="card">
+          <button type="button" id="saveAuditDesktop" class="primary">
+            Masaüstüne Excel olarak kaydet (Özet + Detay)
+          </button>
+        </section>
+
+        <div id="statusBoxAudit" class="status">Hazır.</div>
+      </div>
+
+      <!-- Other: existing generic flow -->
+      <div id="viewOther" class="view hidden">
+        <div class="viewHead">
+          <button type="button" id="backFromOther" class="ghost">← Geri</button>
+        </div>
+        <p class="subtitle">
+          Excel’den tabloyu kopyalayıp buraya yapıştırın (Ctrl+V) veya dosyayı
+          sürükleyip bırakın. Boş satır/sütunlar temizlenir ve hedef klasöre
+          gönderilir.
+        </p>
+
+        <section class="card">
+          <h2>Yapıştır / Sürükle</h2>
+          <div class="dropZone" id="dropZone" tabindex="0">
+            <div class="dropIcon">📥</div>
+            <div class="dropText">
+              <div class="dropTitle">Ctrl+V ile Excel tablosu yapıştırın</div>
+              <div class="dropSub">
+                veya Excel/Csv/PDF dosyasını buraya bırakın
+              </div>
+            </div>
+          </div>
+          <div class="helperBox">
+            Excel’de tabloyu seçip kopyalayın, uygulamada Ctrl+V yapın.
+          </div>
+        </section>
+
+        <section id="previewCard" class="card hidden">
+          <div class="previewHead">
+            <div>
+              <h2>Önizleme</h2>
+              <div id="previewMeta" class="muted"></div>
+            </div>
+            <button id="clearNow" class="ghost">Temizle</button>
+          </div>
+          <div id="previewTableWrap" class="tableWrap"></div>
+        </section>
+
+        <section class="card">
+          <div class="row">
+            <button id="sendNow" class="primary">Gönder</button>
+            <button id="infoNow" class="secondary" disabled>Bilgi ver</button>
+            <span id="counter" class="muted"></span>
+          </div>
+          <div id="statusBox" class="status">Hazır.</div>
+        </section>
+
+        <section class="card">
+          <h2>Son gönderilenler</h2>
+          <ul id="sentList"></ul>
+        </section>
+      </div>
     </main>
 
+    <script src="./audit-form-data.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

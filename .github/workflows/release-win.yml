@@ -1,0 +1,35 @@
+# Yeni sürüm: package.json içinde "version" artır → commit → etiket oluşturup push
+# Örnek: git tag v1.0.1 && git push origin v1.0.1
+# — Kurulum ve latest.yml GitHub Releases’a yüklenir; kurulu uygulama açılışta kontrol eder.
+
+name: Release (Windows)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-win:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win:publish

@@ -1,12 +1,13 @@
 {
-  "name": "bridge-v1",
+  "name": "assistant",
   "version": "1.0.0",
-  "description": "Bridge V1: Excel/PDF table preparation and transfer",
+  "description": "Assistant — Excel/PDF tablo hazırlığı ve aktarımı",
   "main": "main_paste.js",
   "scripts": {
     "start": "electron .",
     "test": "echo \"No tests configured\"",
     "build:win": "electron-builder --win nsis --publish never",
+    "build:win:publish": "electron-builder --win nsis --publish always",
     "build:mac": "electron-builder --mac dmg --publish never"
   },
   "repository": {
@@ -23,17 +24,20 @@
   "homepage": "https://github.com/nekwake/raporsender1#readme",
   "dependencies": {
     "chokidar": "^5.0.0",
+    "electron-updater": "^6.8.3",
+    "exceljs": "^4.4.0",
     "fs-extra": "^11.3.4",
     "pdf-parse": "^2.4.5",
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.bridgev1.app",
-    "productName": "Bridge V1",
+    "appId": "com.nekwake.assistant",
+    "productName": "Assistant",
     "files": [
       "main_paste.js",
       "preload.js",
       "renderer.js",
+      "audit-form-data.js",
       "index.html",
       "styles.css",
       "assets/**",
@@ -49,7 +53,14 @@
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "nekwake",
+        "repo": "raporsender1"
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^41.1.0",
