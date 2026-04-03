@@ -1,6 +1,6 @@
 {
   "name": "assistant",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Assistant — Excel/PDF tablo hazırlığı ve aktarımı",
   "main": "main_paste.js",
   "scripts": {
@@ -54,7 +54,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico"
