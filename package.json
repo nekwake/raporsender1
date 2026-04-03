@@ -1,6 +1,6 @@
 {
   "name": "assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Assistant — Excel/PDF tablo hazırlığı ve aktarımı",
   "main": "main_paste.js",
   "scripts": {
