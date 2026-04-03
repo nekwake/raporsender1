@@ -1,8 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const path = require("path");
-const os = require("os");
 const fs = require("fs-extra");
-const crypto = require("crypto");
 const { autoUpdater } = require("electron-updater");
 
 const xlsx = require("xlsx");
@@ -12,7 +10,8 @@ const pdfParse = require("pdf-parse");
 const APP_DIR = app.getPath("userData");
 const STATE_FILE = path.join(APP_DIR, "state.json");
 
-const DEFAULT_TARGET_PATH = path.join(os.homedir(), "Desktop", "merkeze-gider");
+/** Arayüzde varsayılan; gönderimde pathname boşsa /ingest ile POST edilir. */
+const DEFAULT_CLOUD_WORKER_URL = "https://restcloud.gokberktanis.workers.dev";
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.nekwake.assistant");
@@ -20,8 +19,10 @@ if (process.platform === "win32") {
 
 let mainWindow = null;
 let state = {
-  targetPath: "",
-  sentHashes: {},
+  /** Tam ingest URL (örn. https://assistant-xxx.workers.dev/ingest) */
+  cloudWorkerUrl: "",
+  /** Şube anahtarı; Worker X-Branch-Key ile doğrular */
+  branchKey: "",
   sentHistory: [],
 };
 
@@ -67,10 +68,6 @@ function normalizeGridForHash(grid) {
   return nonEmptyRows;
 }
 
-function sha256(text) {
-  return crypto.createHash("sha256").update(text).digest("hex");
-}
-
 function textToGridBestEffort(text) {
   const lines = String(text || "")
     .split(/\r?\n/)
@@ -106,15 +103,13 @@ async function loadState() {
     state = {
       ...state,
       ...fileState,
-      sentHashes: fileState.sentHashes || {},
+      cloudWorkerUrl: fileState.cloudWorkerUrl || "",
+      branchKey: fileState.branchKey || "",
       sentHistory: fileState.sentHistory || [],
     };
   }
-
-  if (state.targetPath) {
-    const exists = await fs.pathExists(state.targetPath);
-    if (!exists) state.targetPath = "";
-  }
+  delete state.targetPath;
+  delete state.sentHashes;
 }
 
 async function persistState() {
@@ -181,25 +176,125 @@ function setupAutoUpdater() {
   }, sixHoursMs);
 }
 
+function effectiveDisplayCloudUrl() {
+  const s = String(state.cloudWorkerUrl || "").trim();
+  return s || DEFAULT_CLOUD_WORKER_URL;
+}
+
+/**
+ * Worker örneği / ve /ingest kabul eder; bazı kurulumlarda kök POST 500 verebiliyor.
+ * Path yoksa veya / ise POST için .../ingest kullanılır.
+ */
+function resolveIngestPostUrl(input) {
+  const raw = String(input || "").trim() || DEFAULT_CLOUD_WORKER_URL;
+  try {
+    const u = new URL(raw);
+    const path = (u.pathname || "").replace(/\/+$/, "") || "/";
+    if (path === "" || path === "/") {
+      return `${u.origin}/ingest`;
+    }
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+/** HTML / Cloudflare hata sayfası gövdesini kullanıcıya kısa metne indirger; cf-ray ekler. */
+function summarizeCloudErrorResponse(res, bodyText) {
+  const ray = res.headers.get("cf-ray") || res.headers.get("CF-Ray") || "";
+  const snippet = String(bodyText || "").trim();
+  const isHtml =
+    /^<!DOCTYPE/i.test(snippet) ||
+    /^<\s*html/i.test(snippet) ||
+    /<\s*html[\s>]/i.test(snippet);
+  if (isHtml) {
+    let msg =
+      "HTML hata sayfası döndü (Worker istisnası veya edge). Cloudflare Dashboard → Workers → bu Worker → Logs ile aynı zaman dilimindeki hatayı açın.";
+    if (ray) msg += ` cf-ray: ${ray}`;
+    return msg;
+  }
+  if (!snippet) {
+    return ray ? `Yanıt gövdesi boş. cf-ray: ${ray}` : "";
+  }
+  return snippet.length > 240 ? `${snippet.slice(0, 237)}…` : snippet;
+}
+
+function hasCloudDeliveryConfigured() {
+  return Boolean(
+    effectiveDisplayCloudUrl() && String(state.branchKey || "").trim(),
+  );
+}
+
 ipcMain.handle("get-config", async () => {
-  const hasTarget = Boolean(state.targetPath);
+  const hasCloud = hasCloudDeliveryConfigured();
   return {
-    targetPath: state.targetPath,
-    hasTarget,
+    cloudWorkerUrl: effectiveDisplayCloudUrl(),
+    hasCloud,
+    cloudConfigLocked: hasCloud,
+    branchKey: hasCloud ? String(state.branchKey || "") : "",
+    branchKeyConfigured: Boolean(String(state.branchKey || "").trim()),
     sentCount: state.sentHistory.length,
   };
 });
 
-ipcMain.handle("choose-target-folder", async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ["openDirectory", "createDirectory"],
-  });
-  if (result.canceled || !result.filePaths[0]) return null;
+/**
+ * Manuel güncelleme kontrolü. Paketlenmiş uygulamada electron-updater kullanılır;
+ * açılışta ve periyodik kontrol zaten setupAutoUpdater içinde.
+ */
+ipcMain.handle("check-for-updates", async () => {
+  try {
+    if (!app.isPackaged) {
+      return {
+        ok: true,
+        kind: "development",
+        message:
+          "Güncelleme kontrolü yalnızca kurulu uygulamada çalışır. Şu an geliştirme modundasınız (npm start).",
+      };
+    }
+    const result = await autoUpdater.checkForUpdates();
+    if (result?.isUpdateAvailable && result.updateInfo?.version) {
+      return {
+        ok: true,
+        kind: "available",
+        version: result.updateInfo.version,
+        message: `Yeni sürüm v${result.updateInfo.version} bulundu. İndirme otomatik başlar; hazır olunca kapatıp açmanız istenir.`,
+      };
+    }
+    return {
+      ok: true,
+      kind: "uptodate",
+      version: app.getVersion(),
+      message: `Yeni sürüm yok. Kurulu sürüm: v${app.getVersion()}.`,
+    };
+  } catch (err) {
+    const msg = err && typeof err === "object" && "message" in err ? err.message : String(err);
+    return {
+      ok: false,
+      message:
+        msg ||
+        "Güncelleme sunucusuna ulaşılamadı (GitHub Releases veya ağ ayarlarını kontrol edin).",
+    };
+  }
+});
 
-  state.targetPath = result.filePaths[0];
-  await fs.ensureDir(state.targetPath);
+ipcMain.handle("set-cloud-config", async (_event, payload) => {
+  let workerUrl = String(payload?.workerUrl ?? "").trim();
+  if (!workerUrl) workerUrl = DEFAULT_CLOUD_WORKER_URL;
+  const branchKeyRaw = String(payload?.branchKey ?? "").trim();
+  if (!branchKeyRaw) {
+    throw new Error("Şube anahtarı gerekli. Kaydetmeden önce şube kodunu girin.");
+  }
+  state.cloudWorkerUrl = workerUrl;
+  state.branchKey = branchKeyRaw;
   await persistState();
-  return state.targetPath;
+  return { ok: true };
+});
+
+ipcMain.handle("reset-cloud-config", async () => {
+  state.cloudWorkerUrl = "";
+  state.branchKey = "";
+  await persistState();
+  return { ok: true };
 });
 
 ipcMain.handle("parse-file-buffer", async (_event, payload) => {
@@ -236,9 +331,9 @@ ipcMain.handle("send-grid", async (_event, payload) => {
   const { grid, suggestedBaseName, fileName: preferredStem, exportKind } =
     payload || {};
 
-  if (!state.targetPath) {
-    sendStatus("Hedef klasör seçilmedi.", "warn");
-    throw new Error("Hedef klasör seçilmedi.");
+  if (!hasCloudDeliveryConfigured()) {
+    sendStatus("Bulut gönderimi ayarlı değil; önce şube anahtarını kaydedin.", "warn");
+    throw new Error("Bulut gönderimi ayarlı değil; önce şube anahtarını kaydedin.");
   }
 
   if (!Array.isArray(grid) || !grid.length) {
@@ -246,19 +341,17 @@ ipcMain.handle("send-grid", async (_event, payload) => {
   }
 
   const normalizedGrid = normalizeGridForHash(grid);
-  const comparable = JSON.stringify(normalizedGrid);
-  const hash = sha256(comparable);
-
-  const already = state.sentHashes[hash];
-  if (already) {
-    return { deduped: true, fileName: already.fileName, hash };
-  }
 
   let outBuffer;
   if (exportKind === "dayEndSummary") {
     outBuffer = await writeStyledReportXlsxBuffer(
       normalizedGrid,
       "Gün Sonu Özet",
+    );
+  } else if (exportKind === "monthlyStock") {
+    outBuffer = await writeStyledReportXlsxBuffer(
+      normalizedGrid,
+      "Stok Kapanış",
     );
   } else {
     const ws = xlsx.utils.aoa_to_sheet(normalizedGrid);
@@ -279,31 +372,78 @@ ipcMain.handle("send-grid", async (_event, payload) => {
     fileName = `${base}_${timestamp}.xlsx`;
   }
 
-  let attempt = 1;
-  const stemForDup = fileName.replace(/\.xlsx$/i, "");
-  while (fileExists(path.join(state.targetPath, fileName)) && attempt < 1000) {
-    fileName = `${stemForDup}_${attempt}.xlsx`;
-    attempt += 1;
-  }
-
-  const outPath = path.join(state.targetPath, fileName);
-  await fs.writeFile(outPath, outBuffer);
-
-  state.sentHashes[hash] = {
+  let serverMessage = "";
+  const ingestUrl = resolveIngestPostUrl(effectiveDisplayCloudUrl());
+  const body = {
+    version: 1,
+    exportKind: exportKind || "generic",
     fileName,
+    fileBase64: outBuffer.toString("base64"),
+    grid: normalizedGrid,
     sentAt: new Date().toISOString(),
   };
+  let res;
+  try {
+    res = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Branch-Key": String(state.branchKey).trim(),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const msg = err?.message || String(err);
+    throw new Error(`Buluta bağlanılamadı: ${msg}`);
+  }
+  if (!res.ok) {
+    let detail = "";
+    const t = await res.text().catch(() => "");
+    try {
+      const j = JSON.parse(t);
+      const human =
+        j && typeof j.message === "string" && String(j.message).trim()
+          ? String(j.message).trim()
+          : "";
+      const code =
+        j && typeof j.error === "string" && String(j.error).trim()
+          ? String(j.error).trim()
+          : "";
+      if (human && code && human !== code) detail = ` (${human}) [${code}]`;
+      else if (human) detail = ` (${human})`;
+      else if (code) detail = ` (${code})`;
+    } catch (_) {
+      const summary = summarizeCloudErrorResponse(res, t);
+      if (summary) detail = ` — ${summary}`;
+      else if (t) detail = ` — ${t.slice(0, 120)}`;
+    }
+    throw new Error(`Bulut yanıtı ${res.status}${detail || ` ${res.statusText}`}`);
+  }
+  try {
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const j = await res.json();
+      if (j && typeof j.message === "string") {
+        serverMessage = j.message;
+      }
+    }
+  } catch (_) {}
+
+  const sentAt = new Date().toISOString();
   state.sentHistory.unshift({
     name: fileName,
-    sentAt: state.sentHashes[hash].sentAt,
-    hash,
+    sentAt,
   });
   state.sentHistory = state.sentHistory.slice(0, 30);
 
   await persistState();
 
-  sendStatus(`Kaydedildi: ${fileName}`, "success");
-  return { deduped: false, fileName, hash };
+  sendStatus(`Buluta gönderildi: ${fileName}`, "success");
+  return {
+    fileName,
+    viaCloud: true,
+    serverMessage: serverMessage || undefined,
+  };
 });
 
 ipcMain.handle("last-sent", async () => {

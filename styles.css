@@ -16,14 +16,32 @@ body {
 }
 
 .topbar {
-  height: 72px;
-  padding: 0 20px;
+  min-height: 72px;
+  padding: 12px 20px;
   border-bottom: 1px solid #e2e8f0;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(8px);
+}
+
+.topbar-inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 12px 16px;
+}
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.topbar-action {
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .topbar-title {
@@ -64,6 +82,19 @@ h1 {
 .subtitle {
   margin: 0 0 12px;
   color: #475569;
+}
+
+.blockLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.blockLabel .selectInput,
+.blockLabel input.selectInput {
+  width: 100%;
 }
 
 .card {
@@ -174,11 +205,106 @@ li {
 .targetPath {
   font-size: 12px;
   color: #0f172a;
-  max-width: 320px;
+  max-width: 280px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
+}
+
+/* Settings modal */
+.settingsModal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.settingsModal.hidden {
+  display: none;
+}
+
+.settingsModal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.settingsModal__panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 520px;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 12%);
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.settingsModal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.settingsModal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.settingsModal__intro {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settingsModal__section {
+  margin-bottom: 12px;
+}
+
+.settingsModal__section:last-child {
+  margin-bottom: 0;
+}
+
+.settingsModal__h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settingsTargetRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.settingsTargetPath {
+  flex: 1 1 180px;
+  font-size: 12px;
+  color: #0f172a;
+  padding: 10px 12px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  word-break: break-all;
+}
+
+.setupFirstRun {
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .dropZone {

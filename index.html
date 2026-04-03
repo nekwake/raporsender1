@@ -9,32 +9,60 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="topbar-title">
-        <span class="brand-dot"></span>
-        <div>
-          <h1>Assistant</h1>
-          <p id="topbarSubtitle">Belge tipi seçin</p>
+      <div class="topbar-inner">
+        <div class="topbar-title">
+          <span class="brand-dot"></span>
+          <div>
+            <h1>Assistant</h1>
+            <p id="topbarSubtitle">Belge tipi seçin</p>
+          </div>
         </div>
-      </div>
-      <div id="targetBar" class="targetBar hidden">
-        <div class="targetMeta">
-          <div class="targetLabel">Hedef klasör</div>
-          <div id="targetPathLabel" class="targetPath">Seçilmedi</div>
+        <div class="topbar-actions" id="topbarActions">
+          <button type="button" id="btnAppSettings" class="ghost topbar-action">
+            Uygulama ayarları
+          </button>
+          <button type="button" id="btnCheckUpdates" class="ghost topbar-action">
+            Güncellemeleri kontrol et
+          </button>
         </div>
-        <button id="pickTarget" class="ghost">Seç</button>
       </div>
     </header>
 
     <main class="container">
+      <div id="viewSetup" class="view hidden">
+        <section class="card setupFirstRun">
+          <h2>Şube kodu ekleyin</h2>
+          <p class="subtitle" style="margin-top: 0">
+            Bu bilgisayarda ilk açılış. Merkezden verilen <strong>şube anahtarını</strong>
+            yazın; raporlar doğrudan buluta gider.
+          </p>
+          <label class="blockLabel"
+            >Şube anahtarı
+            <input
+              type="text"
+              id="onboardingBranchInput"
+              class="selectInput"
+              placeholder="Örn. PB_BANDIRMA_01"
+              autocomplete="off"
+          /></label>
+          <div class="row" style="margin-top: 14px; flex-wrap: wrap">
+            <button type="button" id="onboardingSaveBtn" class="primary">Kaydet ve devam</button>
+            <button type="button" id="onboardingOpenAdvanced" class="ghost">
+              Worker adresi (isteğe bağlı)
+            </button>
+          </div>
+          <div id="onboardingStatus" class="status" style="margin-top: 12px">—</div>
+        </section>
+      </div>
+
       <!-- Home: document type selection -->
-      <div id="viewHome" class="view">
+      <div id="viewHome" class="view hidden">
         <p class="subtitle">İşlemek istediğiniz belge tipini seçin.</p>
         <div class="modeGrid">
           <button type="button" id="btnModeDayEnd" class="modeBtn primary">
             <span class="modeBtnTitle">Gün sonu özet raporu</span>
             <span class="modeBtnDesc"
-              >Excel yapıştır; hedef klasöre gönder veya masaüstüne
-              kaydet</span
+              >Excel yapıştır; buluta gönder veya masaüstüne kaydet</span
             >
           </button>
           <button type="button" id="btnModeStock" class="modeBtn secondary">
@@ -53,7 +81,7 @@
           <button type="button" id="btnModeOther" class="modeBtn ghost">
             <span class="modeBtnTitle">Diğer</span>
             <span class="modeBtnDesc"
-              >Tablo temizleme ve hedef klasöre gönderim (mevcut akış)</span
+              >Genel tablo yapıştırma ve buluta gönderim</span
             >
           </button>
         </div>
@@ -117,8 +145,8 @@
         </div>
         <p class="subtitle">
           Excel’den stok tablosunu kopyalayıp yapıştırın. İlk boş sütun
-          kaldırılır; üstte sabit sütun başlıkları eklenir. Satır/sütun silme
-          yapılmaz.
+          kaldırılır; üstte sabit sütun başlıkları eklenir. <strong>Gönder</strong>
+          raporu buluta iletir.
         </p>
 
         <section class="card">
@@ -141,6 +169,9 @@
           <div class="row" style="margin-top: 10px">
             <button type="button" id="saveStockDesktop" class="primary">
               Masaüstüne kaydet
+            </button>
+            <button type="button" id="sendStockGrid" class="secondary">
+              Gönder
             </button>
             <button type="button" id="clearStock" class="ghost">Temizle</button>
           </div>
@@ -250,8 +281,13 @@
         </div>
         <p class="subtitle">
           Excel’den tabloyu kopyalayıp buraya yapıştırın (Ctrl+V) veya dosyayı
-          sürükleyip bırakın. Boş satır/sütunlar temizlenir ve hedef klasöre
-          gönderilir.
+          sürükleyip bırakın. Şube / Worker ayarı:
+          <strong>Uygulama ayarları</strong> (üst çubuk).
+        </p>
+
+        <p class="helperBox" style="margin-top: 0">
+          Şube anahtarı ilk açılışta veya ayarlarda kayıtlı olmalı; ardından
+          <strong>Gönder</strong> buluta yollar.
         </p>
 
         <section class="card">
@@ -298,6 +334,65 @@
     </main>
 
     <div id="appToast" class="appToast" role="status" aria-live="polite" hidden></div>
+
+    <div
+      id="settingsModal"
+      class="settingsModal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settingsModalTitle"
+    >
+      <div
+        class="settingsModal__backdrop"
+        id="settingsModalBackdrop"
+        role="presentation"
+      ></div>
+      <div class="settingsModal__panel">
+        <div class="settingsModal__head">
+          <h2 id="settingsModalTitle" class="settingsModal__title">Uygulama ayarları</h2>
+          <button type="button" id="settingsModalClose" class="ghost">Kapat</button>
+        </div>
+        <p class="muted settingsModal__intro">
+          Raporlar yalnızca <strong>buluta</strong> (Worker URL + şube anahtarı) gönderilir.
+        </p>
+
+        <section class="card settingsModal__section">
+          <h3 class="settingsModal__h3">Bulut gönderim (Cloudflare)</h3>
+          <p class="muted" style="margin: 0 0 10px; font-size: 13px">
+            Varsayılan Worker adresi dolu gelir; çoğunlukla yalnızca
+            <strong>şube anahtarını</strong> girip kaydetmeniz yeterli. Gönderim sunucuda
+            <code>/ingest</code> adresine yapılır.
+          </p>
+          <label class="blockLabel"
+            >Ingest URL (düzenlenebilir)
+            <input
+              type="url"
+              id="cloudWorkerUrlInput"
+              class="selectInput"
+              placeholder="https://restcloud.gokberktanis.workers.dev"
+              autocomplete="off"
+          /></label>
+          <label class="blockLabel" style="margin-top: 10px"
+            >Şube anahtarı (X-Branch-Key)
+            <input
+              type="text"
+              id="cloudBranchKeyInput"
+              class="selectInput"
+              placeholder="Örn. PB-IST-04"
+              autocomplete="off"
+          /></label>
+          <div class="row" style="margin-top: 10px; flex-wrap: wrap">
+            <button type="button" id="saveCloudConfig" class="secondary">
+              Bulut ayarlarını kaydet
+            </button>
+            <button type="button" id="editCloudConfig" class="ghost" hidden>
+              Düzenle
+            </button>
+          </div>
+          <div id="cloudConfigHint" class="helperBox"></div>
+        </section>
+      </div>
+    </div>
 
     <script src="./audit-form-data.js"></script>
     <script src="./renderer.js"></script>

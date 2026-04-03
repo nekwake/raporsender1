@@ -3,7 +3,13 @@
  */
 
 const topbarSubtitle = document.getElementById("topbarSubtitle");
-const targetBar = document.getElementById("targetBar");
+const topbarActions = document.getElementById("topbarActions");
+
+const viewSetup = document.getElementById("viewSetup");
+const onboardingBranchInput = document.getElementById("onboardingBranchInput");
+const onboardingSaveBtn = document.getElementById("onboardingSaveBtn");
+const onboardingOpenAdvanced = document.getElementById("onboardingOpenAdvanced");
+const onboardingStatus = document.getElementById("onboardingStatus");
 
 const viewHome = document.getElementById("viewHome");
 const viewDayEnd = document.getElementById("viewDayEnd");
@@ -23,6 +29,7 @@ const backFromOther = document.getElementById("backFromOther");
 const dropZoneStock = document.getElementById("dropZoneStock");
 const stockMonthSelect = document.getElementById("stockMonthSelect");
 const saveStockDesktop = document.getElementById("saveStockDesktop");
+const sendStockGrid = document.getElementById("sendStockGrid");
 const clearStock = document.getElementById("clearStock");
 const stockPreviewCard = document.getElementById("stockPreviewCard");
 const stockPreviewMeta = document.getElementById("stockPreviewMeta");
@@ -56,8 +63,6 @@ const auditLetter = document.getElementById("auditLetter");
 const saveAuditDesktop = document.getElementById("saveAuditDesktop");
 const statusBoxAudit = document.getElementById("statusBoxAudit");
 
-const targetPathLabel = document.getElementById("targetPathLabel");
-const pickTargetBtn = document.getElementById("pickTarget");
 const dropZone = document.getElementById("dropZone");
 const previewCard = document.getElementById("previewCard");
 const previewMeta = document.getElementById("previewMeta");
@@ -67,6 +72,21 @@ const sendNowBtn = document.getElementById("sendNow");
 const counter = document.getElementById("counter");
 const statusBox = document.getElementById("statusBox");
 const sentList = document.getElementById("sentList");
+
+const cloudWorkerUrlInput = document.getElementById("cloudWorkerUrlInput");
+const cloudBranchKeyInput = document.getElementById("cloudBranchKeyInput");
+const saveCloudConfig = document.getElementById("saveCloudConfig");
+const editCloudConfigBtn = document.getElementById("editCloudConfig");
+const cloudConfigHint = document.getElementById("cloudConfigHint");
+
+/** main_paste.js içindeki DEFAULT_CLOUD_WORKER_URL ile aynı olmalı */
+const DEFAULT_INGEST_DISPLAY_URL = "https://restcloud.gokberktanis.workers.dev";
+
+const btnAppSettings = document.getElementById("btnAppSettings");
+const btnCheckUpdates = document.getElementById("btnCheckUpdates");
+const settingsModal = document.getElementById("settingsModal");
+const settingsModalBackdrop = document.getElementById("settingsModalBackdrop");
+const settingsModalClose = document.getElementById("settingsModalClose");
 
 let activeView = "home";
 
@@ -130,9 +150,6 @@ const MAX_TOTAL = MAX_QUALITY + MAX_SERVICE + MAX_CLEAN;
 
 const UI_TEXT = {
   statusReady: "Hazır.",
-  targetNotSelected: "Seçilmedi",
-  targetChoosing: "Hedef klasör seçiliyor...",
-  targetUpdated: "Hedef klasör güncellendi.",
   pasteCleaning: "Yapıştırılıyor...",
   dropReading: "Dosya okunuyor...",
   gridEmpty: "Yapıştırılan/dışarıdan gelen veri boş.",
@@ -140,7 +157,6 @@ const UI_TEXT = {
   cleared: "Temizlendi.",
   sendNoData: "Göndermek için önce veri yükleyin.",
   sending: "Gönderiliyor...",
-  deduped: "Bu içerik daha önce gönderilmiş.",
   sendSuccess: "Tamamlandı. Kaydedildi: ",
   maxFileTooLarge: "Dosya çok büyük (25MB limiti).",
   errorPrefix: "Hata: ",
@@ -165,10 +181,16 @@ function setStatusAudit(text) {
 const appToast = document.getElementById("appToast");
 let appToastTimer = null;
 
-/**
- * Uygulama içi kısa bilgi kutusu; birkaç saniye sonra kapanır.
- * @param {"success"|"info"} kind
- */
+/** Bulut yanıtındaki `message` alanını da gösterir (Worker onayı). */
+function cloudSendSuccessText(result) {
+  const base = `Buluta gönderildi: ${result.fileName}`;
+  if (result.serverMessage) {
+    return `${base} — ${result.serverMessage}`;
+  }
+  return base;
+}
+
+/** Uygulama içi kısa bilgi kutusu; birkaç saniye sonra kapanır. */
 function showAppToast(message, kind = "success") {
   if (!appToast) return;
   const text = String(message || "").trim().slice(0, 280);
@@ -200,13 +222,12 @@ function emptyCellToString(value) {
 
 function showView(view) {
   activeView = view;
+  if (view !== "setup" && viewSetup) viewSetup.classList.add("hidden");
   viewHome.classList.toggle("hidden", view !== "home");
   viewDayEnd.classList.toggle("hidden", view !== "dayEnd");
   viewStock.classList.toggle("hidden", view !== "stock");
   viewAudit.classList.toggle("hidden", view !== "audit");
   viewOther.classList.toggle("hidden", view !== "other");
-
-  targetBar.classList.toggle("hidden", view !== "other" && view !== "dayEnd");
 
   if (view === "home") {
     topbarSubtitle.textContent = "Belge tipi seçin";
@@ -219,6 +240,29 @@ function showView(view) {
   } else {
     topbarSubtitle.textContent = "Diğer — tablo aktarım";
   }
+}
+
+function showBranchSetup() {
+  activeView = "setup";
+  if (viewSetup) viewSetup.classList.remove("hidden");
+  if (viewHome) viewHome.classList.add("hidden");
+  if (viewDayEnd) viewDayEnd.classList.add("hidden");
+  if (viewStock) viewStock.classList.add("hidden");
+  if (viewAudit) viewAudit.classList.add("hidden");
+  if (viewOther) viewOther.classList.add("hidden");
+  topbarActions?.classList.add("hidden");
+  topbarSubtitle.textContent = "Şube kodu ekleyin";
+  if (onboardingStatus) onboardingStatus.textContent = "—";
+  if (onboardingBranchInput) {
+    onboardingBranchInput.value = "";
+    queueMicrotask(() => onboardingBranchInput.focus());
+  }
+}
+
+function finishBranchSetup() {
+  if (viewSetup) viewSetup.classList.add("hidden");
+  topbarActions?.classList.remove("hidden");
+  showView("home");
 }
 
 function cleanGrid(grid) {
@@ -353,10 +397,59 @@ function renderPreviewTable(grid, container) {
   container.appendChild(table);
 }
 
+function applyCloudFormFromConfig(config) {
+  const locked = Boolean(config.cloudConfigLocked);
+  if (cloudWorkerUrlInput) {
+    const u = (config.cloudWorkerUrl && String(config.cloudWorkerUrl).trim()) || "";
+    cloudWorkerUrlInput.value = u || DEFAULT_INGEST_DISPLAY_URL;
+    cloudWorkerUrlInput.disabled = locked;
+  }
+  if (cloudBranchKeyInput) {
+    cloudBranchKeyInput.value = locked ? String(config.branchKey || "") : "";
+    cloudBranchKeyInput.disabled = locked;
+  }
+  if (saveCloudConfig) saveCloudConfig.hidden = locked;
+  if (editCloudConfigBtn) editCloudConfigBtn.hidden = !locked;
+  if (cloudConfigHint) {
+    cloudConfigHint.textContent = locked
+      ? "Bulut kayıtlı. Değiştirmek için Düzenle — URL ve şube sıfırlanır, yeniden girersiniz."
+      : "Şube anahtarını yazıp kaydedin; kayıttan sonra bu bölüm kilitlenir.";
+  }
+}
+
+async function hydrateSettingsPanel() {
+  const config = await window.bridgeApi.getConfig();
+  applyCloudFormFromConfig(config);
+}
+
+function openSettingsModal() {
+  if (!settingsModal) return;
+  settingsModal.classList.remove("hidden");
+  void hydrateSettingsPanel();
+}
+
+function closeSettingsModal() {
+  settingsModal?.classList.add("hidden");
+}
+
 function updateSendEnabled() {
-  const hasTarget = targetPathLabel.dataset.hasTarget === "1";
   const hasGrid = Boolean(currentGrid && currentGrid.length);
-  sendNowBtn.disabled = !(hasTarget && hasGrid);
+  sendNowBtn.disabled = !hasGrid;
+}
+
+async function ensureCloudConfigured(statusFn) {
+  let config;
+  try {
+    config = await window.bridgeApi.getConfig();
+  } catch (_) {
+    config = { hasCloud: false };
+  }
+  if (config.hasCloud) return true;
+  const msg =
+    "Gönderilemiyor: önce şube anahtarını kaydedin (ilk açılış ekranı veya Uygulama ayarları).";
+  statusFn(msg);
+  showAppToast("Şube anahtarı gerekli.", "info");
+  return false;
 }
 
 function updateCounter(config) {
@@ -448,6 +541,7 @@ async function handleParsedStockGrid(rawGrid) {
   stockPreviewCard.classList.remove("hidden");
   setStatusStock("Tablo hazır. Ay seçip masaüstüne kaydedebilirsiniz.");
   updateStockFileHint();
+  updateStockSendEnabled();
 }
 
 async function handleParsedDayEndGrid(rawGrid) {
@@ -537,9 +631,13 @@ function updateDayEndFileHint() {
 }
 
 function updateDayEndSendEnabled() {
-  const hasTarget = targetPathLabel.dataset.hasTarget === "1";
   const hasGrid = Boolean(dayEndGrid && dayEndGrid.length >= 2);
-  if (sendDayEnd) sendDayEnd.disabled = !(hasTarget && hasGrid);
+  if (sendDayEnd) sendDayEnd.disabled = !hasGrid;
+}
+
+function updateStockSendEnabled() {
+  const hasGrid = Boolean(stockGrid && stockGrid.length >= 2);
+  if (sendStockGrid) sendStockGrid.disabled = !hasGrid;
 }
 
 function getAuditFormDef() {
@@ -810,13 +908,7 @@ function buildAuditOzetSheet(meta, agg) {
 
 async function initOtherView() {
   const config = await window.bridgeApi.getConfig();
-  if (config.hasTarget) {
-    targetPathLabel.textContent = config.targetPath;
-    targetPathLabel.dataset.hasTarget = "1";
-  } else {
-    targetPathLabel.textContent = UI_TEXT.targetNotSelected;
-    targetPathLabel.dataset.hasTarget = "0";
-  }
+  applyCloudFormFromConfig(config);
   updateCounter(config);
   updateSendEnabled();
 
@@ -837,15 +929,14 @@ async function initOtherView() {
 
 async function initDayEndView() {
   const config = await window.bridgeApi.getConfig();
-  if (config.hasTarget) {
-    targetPathLabel.textContent = config.targetPath;
-    targetPathLabel.dataset.hasTarget = "1";
-  } else {
-    targetPathLabel.textContent = UI_TEXT.targetNotSelected;
-    targetPathLabel.dataset.hasTarget = "0";
-  }
   updateCounter(config);
   updateDayEndSendEnabled();
+}
+
+async function initStockView() {
+  const config = await window.bridgeApi.getConfig();
+  updateCounter(config);
+  updateStockSendEnabled();
 }
 
 /** Rapor genelde ay bittikten sonra; varsayılan = bir önceki ay (Ocak → Aralık). */
@@ -869,7 +960,10 @@ function initMonthSelect() {
     if (idx === defaultIdx) opt.selected = true;
     stockMonthSelect.appendChild(opt);
   });
-  stockMonthSelect.addEventListener("change", updateStockFileHint);
+  stockMonthSelect.addEventListener("change", () => {
+    updateStockFileHint();
+    updateStockSendEnabled();
+  });
 }
 
 btnModeDayEnd.addEventListener("click", async () => {
@@ -884,7 +978,7 @@ btnModeDayEnd.addEventListener("click", async () => {
   await initDayEndView();
 });
 
-btnModeStock.addEventListener("click", () => {
+btnModeStock.addEventListener("click", async () => {
   stockGrid = null;
   stockPreviewCard.classList.add("hidden");
   stockPreviewWrap.innerHTML = "";
@@ -893,6 +987,7 @@ btnModeStock.addEventListener("click", () => {
   showView("stock");
   applyDefaultStockReportingMonth();
   updateStockFileHint();
+  await initStockView();
 });
 
 btnModeAudit.addEventListener("click", () => {
@@ -936,6 +1031,7 @@ clearStock.addEventListener("click", () => {
   stockPreviewWrap.innerHTML = "";
   stockPreviewMeta.textContent = "";
   setStatusStock("Temizlendi. Yeniden yapıştırın.");
+  updateStockSendEnabled();
 });
 
 if (daySummaryDate) {
@@ -967,8 +1063,10 @@ saveDayEndDesktop.addEventListener("click", async () => {
 sendDayEnd.addEventListener("click", async () => {
   if (!dayEndGrid || dayEndGrid.length < 2) {
     setStatusDayEnd(UI_TEXT.sendNoData);
+    showAppToast("Önce tabloyu yapıştırın.", "info");
     return;
   }
+  if (!(await ensureCloudConfigured(setStatusDayEnd))) return;
   setStatusDayEnd(UI_TEXT.sending);
   try {
     const result = await window.bridgeApi.sendGrid({
@@ -976,16 +1074,13 @@ sendDayEnd.addEventListener("click", async () => {
       fileName: formatDayEndFileStem(daySummaryDate.value),
       exportKind: "dayEndSummary",
     });
-    if (result.deduped) {
-      setStatusDayEnd(UI_TEXT.deduped);
-      showAppToast("Bu tablo zaten gönderilmiş; yeni dosya yazılmadı.", "info");
-    } else {
-      setStatusDayEnd(`${UI_TEXT.sendSuccess}${result.fileName}`);
-      showAppToast(`Hedef klasöre kaydedildi: ${result.fileName}`);
-    }
+    const line = cloudSendSuccessText(result);
+    setStatusDayEnd(line);
+    showAppToast(line.length > 220 ? `${line.slice(0, 217)}…` : line);
     await initDayEndView();
   } catch (err) {
     setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
+    showAppToast(`${UI_TEXT.errorPrefix}${err.message}`.slice(0, 220), "info");
   }
 });
 
@@ -997,6 +1092,53 @@ clearDayEnd.addEventListener("click", () => {
   setStatusDayEnd("Temizlendi. Yeniden yapıştırın.");
   updateDayEndSendEnabled();
 });
+
+if (saveCloudConfig) {
+  saveCloudConfig.addEventListener("click", async () => {
+    try {
+      const workerUrl = cloudWorkerUrlInput?.value?.trim() || "";
+      const branchKey = cloudBranchKeyInput?.value?.trim() || "";
+      await window.bridgeApi.setCloudConfig({ workerUrl, branchKey });
+      const config = await window.bridgeApi.getConfig();
+      applyCloudFormFromConfig(config);
+      updateSendEnabled();
+      updateDayEndSendEnabled();
+      updateStockSendEnabled();
+      const wasSetup = activeView === "setup";
+      if (wasSetup && config.hasCloud) {
+        closeSettingsModal();
+        finishBranchSetup();
+      }
+      const cloudLine = "Bulut kaydedildi; ayarlar kilitlendi. Değiştirmek için Düzenle.";
+      setStatus(cloudLine);
+      showAppToast(cloudLine, "success");
+    } catch (err) {
+      const msg = err?.message || String(err);
+      setStatus(`${UI_TEXT.errorPrefix}${msg}`);
+      showAppToast(msg.slice(0, 220), "info");
+    }
+  });
+}
+
+if (editCloudConfigBtn) {
+  editCloudConfigBtn.addEventListener("click", async () => {
+    try {
+      await window.bridgeApi.resetCloudConfig();
+      const config = await window.bridgeApi.getConfig();
+      closeSettingsModal();
+      applyCloudFormFromConfig(config);
+      updateSendEnabled();
+      updateDayEndSendEnabled();
+      updateStockSendEnabled();
+      setStatus("Bulut ayarları sıfırlandı; şube kodunu yeniden girin.");
+      showAppToast("Şube sıfırlandı. Tekrar kaydedin.", "info");
+      showBranchSetup();
+    } catch (err) {
+      const msg = err?.message || String(err);
+      showAppToast(msg.slice(0, 220), "info");
+    }
+  });
+}
 
 saveStockDesktop.addEventListener("click", async () => {
   if (!stockGrid || stockGrid.length < 2) {
@@ -1015,6 +1157,32 @@ saveStockDesktop.addEventListener("click", async () => {
     showAppToast(`Masaüstüne kaydedildi: ${saved.fileName}`);
   } catch (err) {
     setStatusStock(`${UI_TEXT.errorPrefix}${err.message}`);
+  }
+});
+
+sendStockGrid.addEventListener("click", async () => {
+  if (!stockGrid || stockGrid.length < 2) {
+    setStatusStock("Önce Excel tablosunu yapıştırın.");
+    showAppToast("Önce tabloyu yapıştırın.", "info");
+    return;
+  }
+  if (!(await ensureCloudConfigured(setStatusStock))) return;
+  setStatusStock(UI_TEXT.sending);
+  try {
+    const result = await window.bridgeApi.sendGrid({
+      grid: stockGrid,
+      fileName: getStockFileSlug(),
+      exportKind: "monthlyStock",
+    });
+    const line = cloudSendSuccessText(result);
+    setStatusStock(line);
+    showAppToast(line.length > 220 ? `${line.slice(0, 217)}…` : line);
+    const config = await window.bridgeApi.getConfig();
+    updateCounter(config);
+    updateStockSendEnabled();
+  } catch (err) {
+    setStatusStock(`${UI_TEXT.errorPrefix}${err.message}`);
+    showAppToast(`${UI_TEXT.errorPrefix}${err.message}`.slice(0, 220), "info");
   }
 });
 
@@ -1148,26 +1316,37 @@ saveAuditDesktop.addEventListener("click", async () => {
   }
 });
 
-pickTargetBtn.addEventListener("click", async () => {
-  try {
-    setStatus(UI_TEXT.targetChoosing);
-    const selected = await window.bridgeApi.chooseTargetFolder();
-    if (!selected) return;
-    const config = await window.bridgeApi.getConfig();
-    targetPathLabel.textContent = config.targetPath;
-    targetPathLabel.dataset.hasTarget = "1";
-    updateCounter(config);
-    updateSendEnabled();
-    updateDayEndSendEnabled();
-    setStatus(UI_TEXT.targetUpdated);
-    if (activeView === "dayEnd") {
-      setStatusDayEnd(UI_TEXT.targetUpdated);
+if (btnAppSettings) {
+  btnAppSettings.addEventListener("click", () => openSettingsModal());
+}
+
+if (btnCheckUpdates) {
+  btnCheckUpdates.addEventListener("click", async () => {
+    try {
+      const r = await window.bridgeApi.checkForUpdates();
+      if (!r?.ok) {
+        showAppToast(String(r?.message || "Güncelleme kontrol edilemedi."), "info");
+        return;
+      }
+      showAppToast(String(r.message || "").trim() || "Tamam.", r.kind === "available" ? "success" : "info");
+    } catch (err) {
+      showAppToast(`${UI_TEXT.errorPrefix}${err.message}`.slice(0, 220), "info");
     }
-  } catch (err) {
-    setStatus(`${UI_TEXT.errorPrefix}${err.message}`);
-    if (activeView === "dayEnd") {
-      setStatusDayEnd(`${UI_TEXT.errorPrefix}${err.message}`);
-    }
+  });
+}
+
+if (settingsModalBackdrop) {
+  settingsModalBackdrop.addEventListener("click", () => closeSettingsModal());
+}
+
+if (settingsModalClose) {
+  settingsModalClose.addEventListener("click", () => closeSettingsModal());
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (settingsModal && !settingsModal.classList.contains("hidden")) {
+    closeSettingsModal();
   }
 });
 
@@ -1183,8 +1362,10 @@ clearNowBtn.addEventListener("click", () => {
 sendNowBtn.addEventListener("click", async () => {
   if (!currentGrid || !currentGrid.length) {
     setStatus(UI_TEXT.sendNoData);
+    showAppToast("Önce tabloyu yapıştırın.", "info");
     return;
   }
+  if (!(await ensureCloudConfigured(setStatus))) return;
   setStatus(UI_TEXT.sending);
   try {
     const result = await window.bridgeApi.sendGrid({
@@ -1192,13 +1373,9 @@ sendNowBtn.addEventListener("click", async () => {
       suggestedBaseName: currentMeta.suggestedBaseName,
     });
 
-    if (result.deduped) {
-      setStatus(UI_TEXT.deduped);
-      showAppToast("Bu içerik zaten gönderilmiş; yeni dosya yazılmadı.", "info");
-    } else {
-      setStatus(`${UI_TEXT.sendSuccess}${result.fileName}`);
-      showAppToast(`Hedef klasöre kaydedildi: ${result.fileName}`);
-    }
+    const line = cloudSendSuccessText(result);
+    setStatus(line);
+    showAppToast(line.length > 220 ? `${line.slice(0, 217)}…` : line);
     const config = await window.bridgeApi.getConfig();
     updateCounter(config);
     updateSendEnabled();
@@ -1212,6 +1389,7 @@ sendNowBtn.addEventListener("click", async () => {
     }
   } catch (err) {
     setStatus(`${UI_TEXT.errorPrefix}${err.message}`);
+    showAppToast(`${UI_TEXT.errorPrefix}${err.message}`.slice(0, 220), "info");
   }
 });
 
@@ -1219,6 +1397,7 @@ window.addEventListener(
   "paste",
   async (event) => {
     try {
+      if (activeView === "setup") return;
       const { grid, sourceType } = getClipboardGridFromPasteEvent(event);
       if (!grid) return;
 
@@ -1260,9 +1439,55 @@ window.bridgeApi.onStatus((payload) => {
   if (activeView === "dayEnd") setStatusDayEnd(payload.message);
 });
 
-function init() {
+if (onboardingSaveBtn && onboardingBranchInput) {
+  onboardingSaveBtn.addEventListener("click", async () => {
+    const branchKey = onboardingBranchInput.value.trim();
+    if (!branchKey) {
+      if (onboardingStatus) onboardingStatus.textContent = "Şube anahtarını yazın.";
+      return;
+    }
+    if (onboardingStatus) onboardingStatus.textContent = "Kaydediliyor…";
+    try {
+      await window.bridgeApi.setCloudConfig({
+        workerUrl: DEFAULT_INGEST_DISPLAY_URL,
+        branchKey,
+      });
+      applyCloudFormFromConfig(await window.bridgeApi.getConfig());
+      finishBranchSetup();
+      showAppToast("Şube kaydedildi.", "success");
+      if (onboardingStatus) onboardingStatus.textContent = "Tamam. Belge tipini seçebilirsiniz.";
+    } catch (err) {
+      const msg = err?.message || String(err);
+      if (onboardingStatus) onboardingStatus.textContent = msg;
+    }
+  });
+}
+
+if (onboardingOpenAdvanced) {
+  onboardingOpenAdvanced.addEventListener("click", () => openSettingsModal());
+}
+
+if (onboardingBranchInput) {
+  onboardingBranchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onboardingSaveBtn?.click();
+    }
+  });
+}
+
+async function init() {
   initMonthSelect();
-  showView("home");
+  try {
+    const config = await window.bridgeApi.getConfig();
+    if (!config.hasCloud) {
+      showBranchSetup();
+    } else {
+      showView("home");
+    }
+  } catch (_) {
+    showBranchSetup();
+  }
   setStatus(UI_TEXT.statusReady);
   setStatusStock(UI_TEXT.statusReady);
   setStatusDayEnd(UI_TEXT.statusReady);

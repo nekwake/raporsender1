@@ -1,0 +1,24 @@
+# Kopyalayıp wrangler.toml yapın: cp wrangler.example.toml wrangler.toml
+name = "assistant-ingest"
+main = "worker-example.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# Örnek Worker: worker-example.js — şube env ile (BRANCH_KEY / ALLOWED_BRANCH_KEYS).
+# Tek şube anahtarı:
+# BRANCH_KEY = "PB-IST-04"
+# Birden fazla (BRANCH_KEY boş bırakılabilir):
+# ALLOWED_BRANCH_KEYS = "PB-01,PB-02"
+#
+# Canlıda KV kullanıyorsanız: KV’deki Key, uygulamadaki X-Branch-Key ile birebir aynı olmalı
+# (büyük/küçük harf, boşluk). Value boşsa birçok Worker "geçersiz şube" döndürür.
+# [[kv_namespaces]]
+# binding = "KV"
+# id = "<namespace-id>"
+
+# R2 örneği:
+# [[r2_buckets]]
+# binding = "R2"
+# bucket_name = "assistant-raporlar"
+
+# D1: wrangler d1 create assistant-meta
