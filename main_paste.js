@@ -270,12 +270,34 @@ ipcMain.handle("check-for-updates", async () => {
     const msg = err && typeof err === "object" && "message" in err ? err.message : String(err);
     return {
       ok: false,
-      message:
-        msg ||
-        "Güncelleme sunucusuna ulaşılamadı (GitHub Releases veya ağ ayarlarını kontrol edin).",
+      message: explainGithubUpdateError(msg),
     };
   }
 });
+
+/** GitHub private repo / eksik token durumunda İngilizce ham hatayı Türkçe açıklamaya bağlar. */
+function explainGithubUpdateError(raw) {
+  const s = String(raw || "").trim();
+  const low = s.toLowerCase();
+  if (
+    low.includes("auth token") ||
+    low.includes("double check") ||
+    low.includes("bad credentials") ||
+    low.includes("could not retrieve publish") ||
+    (low.includes("401") && low.includes("github")) ||
+    (low.includes("403") && low.includes("github"))
+  ) {
+    return [
+      "Otomatik güncelleme bu kurulumda GitHub’dan sürüm dosyası okuyamıyor.",
+      "Bunun en sık nedeni: depo private olduğu için Releases API’si dışarıya kapalıdır (token olmadan electron-updater erişemez).",
+      "Seçenekler: repoyu public yapmak; yalnızca kurulum dosyalarını içeren ayrı bir public repoda release yayınlamak; veya güncellemeleri kendi sunucunuzda (generic provider) barındırmak.",
+      s ? `Detay: ${s.slice(0, 200)}${s.length > 200 ? "…" : ""}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  return s || "Güncelleme sunucusuna ulaşılamadı (ağ veya GitHub Releases).";
+}
 
 ipcMain.handle("set-cloud-config", async (_event, payload) => {
   let workerUrl = String(payload?.workerUrl ?? "").trim();
