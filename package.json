@@ -6,8 +6,8 @@
   "scripts": {
     "start": "electron .",
     "test": "echo \"No tests configured\"",
-    "build:win": "electron-builder --win nsis --publish never",
-    "build:win:publish": "electron-builder --win nsis --publish always",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:win:publish": "electron-builder --win nsis --x64 --publish always",
     "build:mac": "electron-builder --mac dmg --publish never"
   },
   "repository": {
@@ -51,7 +51,12 @@
       "icon": "assets/icon.png"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "assets/icon.ico"
     },
     "publish": [
