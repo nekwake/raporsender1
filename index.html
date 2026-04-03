@@ -21,7 +21,11 @@
           <button type="button" id="btnAppSettings" class="ghost topbar-action">
             Uygulama ayarları
           </button>
-          <button type="button" id="btnCheckUpdates" class="ghost topbar-action">
+          <button
+            type="button"
+            id="btnCheckUpdates"
+            class="ghost topbar-action"
+          >
             Güncellemeleri kontrol et
           </button>
         </div>
@@ -33,7 +37,8 @@
         <section class="card setupFirstRun">
           <h2>Şube kodu ekleyin</h2>
           <p class="subtitle" style="margin-top: 0">
-            Bu bilgisayarda ilk açılış. Merkezden verilen <strong>şube anahtarını</strong>
+            Bu bilgisayarda ilk açılış. Merkezden verilen
+            <strong>şube anahtarını</strong>
             yazın; raporlar doğrudan buluta gider.
           </p>
           <label class="blockLabel"
@@ -42,16 +47,20 @@
               type="text"
               id="onboardingBranchInput"
               class="selectInput"
-              placeholder="Örn. PB_BANDIRMA_01"
+              placeholder="Örn. PB-BANDIRMA-01"
               autocomplete="off"
           /></label>
           <div class="row" style="margin-top: 14px; flex-wrap: wrap">
-            <button type="button" id="onboardingSaveBtn" class="primary">Kaydet ve devam</button>
+            <button type="button" id="onboardingSaveBtn" class="primary">
+              Kaydet ve devam
+            </button>
             <button type="button" id="onboardingOpenAdvanced" class="ghost">
               Worker adresi (isteğe bağlı)
             </button>
           </div>
-          <div id="onboardingStatus" class="status" style="margin-top: 12px">—</div>
+          <div id="onboardingStatus" class="status" style="margin-top: 12px">
+            —
+          </div>
         </section>
       </div>
 
@@ -90,7 +99,9 @@
       <!-- Gün sonu özet raporu -->
       <div id="viewDayEnd" class="view hidden">
         <div class="viewHead">
-          <button type="button" id="backFromDayEnd" class="ghost">← Geri</button>
+          <button type="button" id="backFromDayEnd" class="ghost">
+            ← Geri
+          </button>
         </div>
         <p class="subtitle">
           Gün sonu tablosunu Excel’den kopyalayıp <strong>Ctrl+V</strong> ile
@@ -124,7 +135,9 @@
             <button type="button" id="sendDayEnd" class="secondary">
               Gönder
             </button>
-            <button type="button" id="clearDayEnd" class="ghost">Temizle</button>
+            <button type="button" id="clearDayEnd" class="ghost">
+              Temizle
+            </button>
           </div>
           <div id="dayEndFileHint" class="helperBox"></div>
         </section>
@@ -145,7 +158,8 @@
         </div>
         <p class="subtitle">
           Excel’den stok tablosunu kopyalayıp yapıştırın. İlk boş sütun
-          kaldırılır; üstte sabit sütun başlıkları eklenir. <strong>Gönder</strong>
+          kaldırılır; üstte sabit sütun başlıkları eklenir.
+          <strong>Gönder</strong>
           raporu buluta iletir.
         </p>
 
@@ -333,7 +347,13 @@
       </div>
     </main>
 
-    <div id="appToast" class="appToast" role="status" aria-live="polite" hidden></div>
+    <div
+      id="appToast"
+      class="appToast"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
 
     <div
       id="settingsModal"
@@ -349,19 +369,24 @@
       ></div>
       <div class="settingsModal__panel">
         <div class="settingsModal__head">
-          <h2 id="settingsModalTitle" class="settingsModal__title">Uygulama ayarları</h2>
-          <button type="button" id="settingsModalClose" class="ghost">Kapat</button>
+          <h2 id="settingsModalTitle" class="settingsModal__title">
+            Uygulama ayarları
+          </h2>
+          <button type="button" id="settingsModalClose" class="ghost">
+            Kapat
+          </button>
         </div>
         <p class="muted settingsModal__intro">
-          Raporlar yalnızca <strong>buluta</strong> (Worker URL + şube anahtarı) gönderilir.
+          Raporlar yalnızca <strong>buluta</strong> (Worker URL + şube anahtarı)
+          gönderilir.
         </p>
 
         <section class="card settingsModal__section">
           <h3 class="settingsModal__h3">Bulut gönderim (Cloudflare)</h3>
           <p class="muted" style="margin: 0 0 10px; font-size: 13px">
             Varsayılan Worker adresi dolu gelir; çoğunlukla yalnızca
-            <strong>şube anahtarını</strong> girip kaydetmeniz yeterli. Gönderim sunucuda
-            <code>/ingest</code> adresine yapılır.
+            <strong>şube anahtarını</strong> girip kaydetmeniz yeterli. Gönderim
+            sunucuda <code>/ingest</code> adresine yapılır.
           </p>
           <label class="blockLabel"
             >Ingest URL (düzenlenebilir)
