@@ -5,7 +5,8 @@
  * Cloudflare "error code: 1101" = yakalanmamış istisna (genelde env.R2 vb. binding eksik veya prod kodda hata).
  *
  * İstek (Electron): POST JSON, header X-Branch-Key
- * Gövde: { version, exportKind, fileName, fileBase64, grid, sentAt }
+ * Gövde: { version, exportKind, fileName, fileBase64, grid, sentAt, reportDate }
+ * reportDate: YYYY-MM-DD (gün sonu=tarih seçici; stok=seçilen ayın son günü; diğer=bugün)
  */
 
 export default {

@@ -349,9 +349,32 @@ ipcMain.handle("parse-file-buffer", async (_event, payload) => {
   );
 });
 
+/** Renderer’dan gelen reportDate (YYYY-MM-DD); geçersizse yerel bugün. */
+function coerceReportDateISO(maybe) {
+  const s = String(maybe || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  const [ys, ms, ds] = s.split("-");
+  const y = Number(ys);
+  const m = Number(ms);
+  const day = Number(ds);
+  if (!Number.isFinite(y) || m < 1 || m > 12 || day < 1 || day > 31) {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return s;
+}
+
 ipcMain.handle("send-grid", async (_event, payload) => {
-  const { grid, suggestedBaseName, fileName: preferredStem, exportKind } =
-    payload || {};
+  const {
+    grid,
+    suggestedBaseName,
+    fileName: preferredStem,
+    exportKind,
+    reportDate: reportDateRaw,
+  } = payload || {};
 
   if (!hasCloudDeliveryConfigured()) {
     sendStatus("Bulut gönderimi ayarlı değil; önce şube anahtarını kaydedin.", "warn");
@@ -396,6 +419,7 @@ ipcMain.handle("send-grid", async (_event, payload) => {
 
   let serverMessage = "";
   const ingestUrl = resolveIngestPostUrl(effectiveDisplayCloudUrl());
+  const reportDate = coerceReportDateISO(reportDateRaw);
   const body = {
     version: 1,
     exportKind: exportKind || "generic",
@@ -403,6 +427,7 @@ ipcMain.handle("send-grid", async (_event, payload) => {
     fileBase64: outBuffer.toString("base64"),
     grid: normalizedGrid,
     sentAt: new Date().toISOString(),
+    reportDate,
   };
   let res;
   try {

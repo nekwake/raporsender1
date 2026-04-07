@@ -610,6 +610,29 @@ function getPreviousDayISO(ref = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+/** Yerel saatle bugün YYYY-MM-DD (Diğer mod / fallback). */
+function getLocalDateISOString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Gün sonu: tarih seçicideki değer (YYYY-MM-DD). */
+function getDayEndReportDateISO() {
+  const v = String(daySummaryDate?.value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  return getLocalDateISOString();
+}
+
+/** Stok: seçilen kapanış ayının son günü (Worker / dashboard dönem eşlemesi). */
+function getStockClosingReportDateISO() {
+  const idx = parseInt(stockMonthSelect?.value ?? "0", 10);
+  if (Number.isNaN(idx) || idx < 0 || idx > 11) return getLocalDateISOString();
+  const year = yearForSelectedStockMonth(idx);
+  const lastDay = new Date(year, idx + 1, 0).getDate();
+  const m = String(idx + 1).padStart(2, "0");
+  return `${year}-${m}-${String(lastDay).padStart(2, "0")}`;
+}
+
 /** date input yyyy-mm-dd → dd-mm-yyyy-gun-sonu */
 function formatDayEndFileStem(isoDate) {
   const raw = String(isoDate || "").trim();
@@ -1073,6 +1096,7 @@ sendDayEnd.addEventListener("click", async () => {
       grid: dayEndGrid,
       fileName: formatDayEndFileStem(daySummaryDate.value),
       exportKind: "dayEndSummary",
+      reportDate: getDayEndReportDateISO(),
     });
     const line = cloudSendSuccessText(result);
     setStatusDayEnd(line);
@@ -1173,6 +1197,7 @@ sendStockGrid.addEventListener("click", async () => {
       grid: stockGrid,
       fileName: getStockFileSlug(),
       exportKind: "monthlyStock",
+      reportDate: getStockClosingReportDateISO(),
     });
     const line = cloudSendSuccessText(result);
     setStatusStock(line);
@@ -1371,6 +1396,7 @@ sendNowBtn.addEventListener("click", async () => {
     const result = await window.bridgeApi.sendGrid({
       grid: currentGrid,
       suggestedBaseName: currentMeta.suggestedBaseName,
+      reportDate: getLocalDateISOString(),
     });
 
     const line = cloudSendSuccessText(result);
