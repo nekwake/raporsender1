@@ -493,6 +493,103 @@ ipcMain.handle("send-grid", async (_event, payload) => {
   };
 });
 
+ipcMain.handle("send-orders-raw", async (_event, payload) => {
+  const raw = payload?.raw_data ?? payload?.rawData;
+  const text = String(raw ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const trimmed = text.trim();
+
+  if (!hasCloudDeliveryConfigured()) {
+    sendStatus("Bulut gönderimi ayarlı değil; önce şube anahtarını kaydedin.", "warn");
+    throw new Error("Bulut gönderimi ayarlı değil; önce şube anahtarını kaydedin.");
+  }
+
+  if (!trimmed) {
+    throw new Error("Gönderilecek metin yok.");
+  }
+
+  const maxChars = 12 * 1024 * 1024;
+  if (trimmed.length > maxChars) {
+    throw new Error(`Metin çok uzun (en fazla ${Math.floor(maxChars / (1024 * 1024))} MB).`);
+  }
+
+  const ingestUrl = resolveIngestPostUrl(effectiveDisplayCloudUrl());
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const fileName = `siparis_ham_${timestamp}.txt`;
+
+  const body = {
+    version: 1,
+    type: "orders",
+    raw_data: trimmed,
+    sentAt: new Date().toISOString(),
+    fileName,
+  };
+
+  let res;
+  try {
+    res = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Branch-Key": String(state.branchKey).trim(),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const msg = err?.message || String(err);
+    throw new Error(`Buluta bağlanılamadı: ${msg}`);
+  }
+
+  let serverMessage = "";
+  if (!res.ok) {
+    let detail = "";
+    const t = await res.text().catch(() => "");
+    try {
+      const j = JSON.parse(t);
+      const human =
+        j && typeof j.message === "string" && String(j.message).trim()
+          ? String(j.message).trim()
+          : "";
+      const code =
+        j && typeof j.error === "string" && String(j.error).trim()
+          ? String(j.error).trim()
+          : "";
+      if (human && code && human !== code) detail = ` (${human}) [${code}]`;
+      else if (human) detail = ` (${human})`;
+      else if (code) detail = ` (${code})`;
+    } catch (_) {
+      const summary = summarizeCloudErrorResponse(res, t);
+      if (summary) detail = ` — ${summary}`;
+      else if (t) detail = ` — ${t.slice(0, 120)}`;
+    }
+    throw new Error(`Bulut yanıtı ${res.status}${detail || ` ${res.statusText}`}`);
+  }
+
+  try {
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const j = await res.json();
+      if (j && typeof j.message === "string") {
+        serverMessage = j.message;
+      }
+    }
+  } catch (_) {}
+
+  const sentAt = new Date().toISOString();
+  state.sentHistory.unshift({
+    name: fileName,
+    sentAt,
+  });
+  state.sentHistory = state.sentHistory.slice(0, 30);
+  await persistState();
+
+  sendStatus(`Sipariş listesi gönderildi: ${fileName}`, "success");
+  return {
+    fileName,
+    viaCloud: true,
+    serverMessage: serverMessage || undefined,
+  };
+});
+
 ipcMain.handle("last-sent", async () => {
   return (state.sentHistory || []).slice(0, 10).map((x) => ({
     name: x.name,

@@ -323,6 +323,39 @@ li {
   transform: translateY(-1px);
 }
 
+.dropZone--textarea {
+  align-items: stretch;
+  padding: 10px;
+}
+
+.ordersRawTextarea {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  tab-size: 4;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.ordersRawTextarea:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
 .dropIcon {
   font-size: 30px;
 }

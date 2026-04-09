@@ -15,14 +15,17 @@ const viewHome = document.getElementById("viewHome");
 const viewDayEnd = document.getElementById("viewDayEnd");
 const viewStock = document.getElementById("viewStock");
 const viewAudit = document.getElementById("viewAudit");
+const viewOrders = document.getElementById("viewOrders");
 const viewOther = document.getElementById("viewOther");
 
 const btnModeDayEnd = document.getElementById("btnModeDayEnd");
 const btnModeStock = document.getElementById("btnModeStock");
+const btnModeOrders = document.getElementById("btnModeOrders");
 const btnModeAudit = document.getElementById("btnModeAudit");
 const btnModeOther = document.getElementById("btnModeOther");
 const backFromDayEnd = document.getElementById("backFromDayEnd");
 const backFromStock = document.getElementById("backFromStock");
+const backFromOrders = document.getElementById("backFromOrders");
 const backFromAudit = document.getElementById("backFromAudit");
 const backFromOther = document.getElementById("backFromOther");
 
@@ -62,6 +65,12 @@ const auditPercent = document.getElementById("auditPercent");
 const auditLetter = document.getElementById("auditLetter");
 const saveAuditDesktop = document.getElementById("saveAuditDesktop");
 const statusBoxAudit = document.getElementById("statusBoxAudit");
+
+const dropZoneOrders = document.getElementById("dropZoneOrders");
+const ordersRawTextarea = document.getElementById("ordersRawTextarea");
+const sendOrders = document.getElementById("sendOrders");
+const clearOrders = document.getElementById("clearOrders");
+const statusBoxOrders = document.getElementById("statusBoxOrders");
 
 const dropZone = document.getElementById("dropZone");
 const previewCard = document.getElementById("previewCard");
@@ -178,6 +187,10 @@ function setStatusAudit(text) {
   statusBoxAudit.textContent = text;
 }
 
+function setStatusOrders(text) {
+  if (statusBoxOrders) statusBoxOrders.textContent = text;
+}
+
 const appToast = document.getElementById("appToast");
 let appToastTimer = null;
 
@@ -226,6 +239,7 @@ function showView(view) {
   viewHome.classList.toggle("hidden", view !== "home");
   viewDayEnd.classList.toggle("hidden", view !== "dayEnd");
   viewStock.classList.toggle("hidden", view !== "stock");
+  if (viewOrders) viewOrders.classList.toggle("hidden", view !== "orders");
   viewAudit.classList.toggle("hidden", view !== "audit");
   viewOther.classList.toggle("hidden", view !== "other");
 
@@ -235,6 +249,8 @@ function showView(view) {
     topbarSubtitle.textContent = "Gün sonu özet raporu";
   } else if (view === "stock") {
     topbarSubtitle.textContent = "Aylık stok kapanış";
+  } else if (view === "orders") {
+    topbarSubtitle.textContent = "Günlük sipariş gönder";
   } else if (view === "audit") {
     topbarSubtitle.textContent = "Operasyon denetim raporu";
   } else {
@@ -248,6 +264,7 @@ function showBranchSetup() {
   if (viewHome) viewHome.classList.add("hidden");
   if (viewDayEnd) viewDayEnd.classList.add("hidden");
   if (viewStock) viewStock.classList.add("hidden");
+  if (viewOrders) viewOrders.classList.add("hidden");
   if (viewAudit) viewAudit.classList.add("hidden");
   if (viewOther) viewOther.classList.add("hidden");
   topbarActions?.classList.add("hidden");
@@ -1013,6 +1030,15 @@ btnModeStock.addEventListener("click", async () => {
   await initStockView();
 });
 
+if (btnModeOrders) {
+  btnModeOrders.addEventListener("click", () => {
+    if (ordersRawTextarea) ordersRawTextarea.value = "";
+    setStatusOrders(UI_TEXT.statusReady);
+    showView("orders");
+    queueMicrotask(() => ordersRawTextarea?.focus());
+  });
+}
+
 btnModeAudit.addEventListener("click", () => {
   auditPercent.textContent = "Genel yüzde: —";
   auditLetter.textContent = "—";
@@ -1039,6 +1065,13 @@ backFromStock.addEventListener("click", () => {
   showView("home");
   setStatusStock(UI_TEXT.statusReady);
 });
+
+if (backFromOrders) {
+  backFromOrders.addEventListener("click", () => {
+    showView("home");
+    setStatusOrders(UI_TEXT.statusReady);
+  });
+}
 
 backFromAudit.addEventListener("click", () => {
   showView("home");
@@ -1233,6 +1266,66 @@ function bindDropZone(el, onFiles) {
   });
 }
 
+if (dropZoneOrders && ordersRawTextarea) {
+  dropZoneOrders.addEventListener("click", (e) => {
+    if (e.target === ordersRawTextarea) return;
+    ordersRawTextarea.focus();
+  });
+}
+
+if (sendOrders) {
+  sendOrders.addEventListener("click", async () => {
+    const raw = ordersRawTextarea ? String(ordersRawTextarea.value || "").trim() : "";
+    if (!raw) {
+      setStatusOrders("Önce ham listeyi yapıştırın veya dosyadan yükleyin.");
+      showAppToast("Önce metni yapıştırın.", "info");
+      return;
+    }
+    if (!(await ensureCloudConfigured(setStatusOrders))) return;
+    setStatusOrders(UI_TEXT.sending);
+    try {
+      const result = await window.bridgeApi.sendOrdersRaw({ raw_data: raw });
+      const line = cloudSendSuccessText(result);
+      setStatusOrders(line);
+      showAppToast(line.length > 220 ? `${line.slice(0, 217)}…` : line);
+    } catch (err) {
+      setStatusOrders(`${UI_TEXT.errorPrefix}${err.message}`);
+      showAppToast(`${UI_TEXT.errorPrefix}${err.message}`.slice(0, 220), "info");
+    }
+  });
+}
+
+if (clearOrders && ordersRawTextarea) {
+  clearOrders.addEventListener("click", () => {
+    ordersRawTextarea.value = "";
+    setStatusOrders(UI_TEXT.cleared);
+    ordersRawTextarea.focus();
+  });
+}
+
+if (dropZoneOrders) {
+  bindDropZone(dropZoneOrders, async (file) => {
+    if (activeView !== "orders" || !ordersRawTextarea) return;
+    setStatusOrders(UI_TEXT.dropReading);
+    try {
+      const text = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Dosya okunamadı."));
+        reader.readAsText(file, "UTF-8");
+      });
+      ordersRawTextarea.value = text;
+      setStatusOrders(
+        text.trim()
+          ? "Dosya yüklendi. Gönder’e basarak buluta iletebilirsiniz."
+          : "Dosya boş görünüyor.",
+      );
+    } catch (err) {
+      setStatusOrders(`${UI_TEXT.errorPrefix}${err.message}`);
+    }
+  });
+}
+
 bindDropZone(dropZoneStock, async (file) => {
   if (activeView !== "stock") return;
   setStatusStock(UI_TEXT.dropReading);
@@ -1424,6 +1517,7 @@ window.addEventListener(
   async (event) => {
     try {
       if (activeView === "setup") return;
+      if (activeView === "orders") return;
       const { grid, sourceType } = getClipboardGridFromPasteEvent(event);
       if (!grid) return;
 
@@ -1463,6 +1557,7 @@ window.bridgeApi.onStatus((payload) => {
   if (!payload?.message) return;
   if (activeView === "other") setStatus(payload.message);
   if (activeView === "dayEnd") setStatusDayEnd(payload.message);
+  if (activeView === "orders") setStatusOrders(payload.message);
 });
 
 if (onboardingSaveBtn && onboardingBranchInput) {
@@ -1518,6 +1613,7 @@ async function init() {
   setStatusStock(UI_TEXT.statusReady);
   setStatusDayEnd(UI_TEXT.statusReady);
   setStatusAudit(UI_TEXT.statusReady);
+  setStatusOrders(UI_TEXT.statusReady);
 }
 
 init();

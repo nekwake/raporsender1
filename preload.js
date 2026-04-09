@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("bridgeApi", {
   resetCloudConfig: () => ipcRenderer.invoke("reset-cloud-config"),
   parseFileBuffer: (payload) => ipcRenderer.invoke("parse-file-buffer", payload),
   sendGrid: (payload) => ipcRenderer.invoke("send-grid", payload),
+  sendOrdersRaw: (payload) => ipcRenderer.invoke("send-orders-raw", payload),
   saveXlsxDesktop: (payload) => ipcRenderer.invoke("save-xlsx-desktop", payload),
   getLastSent: () => ipcRenderer.invoke("last-sent"),
   onStatus: (callback) => {

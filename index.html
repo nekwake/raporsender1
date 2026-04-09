@@ -81,6 +81,13 @@
               ya da buluta yollanabilir.</span
             >
           </button>
+          <button type="button" id="btnModeOrders" class="modeBtn secondary">
+            <span class="modeBtnTitle">Günlük sipariş gönder</span>
+            <span class="modeBtnDesc"
+              >POS’ten kopyalanan ham sipariş listesini yapıştırın; sunucuda D1’e
+              işlenir (vardiya tarihi Worker’da düzeltilir).</span
+            >
+          </button>
           <button type="button" id="btnModeAudit" class="modeBtn secondary">
             <span class="modeBtnTitle">Operasyon Denetim Raporu</span>
             <span class="modeBtnDesc"
@@ -199,6 +206,45 @@
         </section>
 
         <div id="statusBoxStock" class="status">Hazır.</div>
+      </div>
+
+      <!-- Günlük ham sipariş listesi → Worker (D1) -->
+      <div id="viewOrders" class="view hidden">
+        <div class="viewHead">
+          <button type="button" id="backFromOrders" class="ghost">← Geri</button>
+        </div>
+        <p class="subtitle">
+          POS’ten kopyalanan <strong>tablo halindeki</strong> ham sipariş metnini
+          aşağıya yapıştırın (<strong>Ctrl+V</strong>) veya düz metin dosyasını
+          sürükleyip bırakın. Gönderim <code>/ingest</code> üzerinden yapılır;
+          ayrıştırma ve tarih düzeltmesi sunucuda yapılır (Telegram bildirimi
+          yok).
+        </p>
+
+        <section class="card">
+          <h2>Ham liste</h2>
+          <div class="dropZone dropZone--textarea" id="dropZoneOrders" tabindex="0">
+            <textarea
+              id="ordersRawTextarea"
+              class="ordersRawTextarea"
+              spellcheck="false"
+              wrap="off"
+              placeholder="Satırları buraya yapıştırın (sekme ile ayrılmış kolonlar)…"
+            ></textarea>
+          </div>
+          <p class="helperBox" style="margin-top: 10px; margin-bottom: 0">
+            İpucu: listede boş satır bırakmayın; mümkünse POS çıktısını olduğu
+            gibi seçip kopyalayın.
+          </p>
+        </section>
+
+        <section class="card">
+          <div class="row" style="flex-wrap: wrap">
+            <button type="button" id="sendOrders" class="secondary">Gönder</button>
+            <button type="button" id="clearOrders" class="ghost">Temizle</button>
+          </div>
+          <div id="statusBoxOrders" class="status">Hazır.</div>
+        </section>
       </div>
 
       <!-- Operation audit -->

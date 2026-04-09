@@ -1,10 +1,24 @@
+# Windows kurulum + GitHub Releases yayını
+#
+# electron-updater, GitHub Releases üzerindeki latest.yml + .exe dosyalarını arar;
+# yalnızca Actions artifact’i yetmez — bu yüzden main’e push’ta publish çalışır.
+#
+# Her yeni sürüm için package.json içinde "version" değerini artırın (örn. 1.0.2 → 1.0.3).
+# Aynı sürüm numarasıyla ikinci kez yayın genelde electron-builder tarafından reddedilir.
+#
+# Depo private ise: GitHub Releases API kurulu uygulamadan kimlik doğrulamasız erişilemeyebilir;
+# bu durumda repoyu public yapın veya generic provider + barındırma kullanın (uygulama içi mesaja bakın).
+
 name: Build (Windows)
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   build-win:
@@ -23,8 +37,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows installer
+      # PR: yalnızca derleme doğrulaması; Release oluşturulmaz
+      - name: Build Windows installer (PR)
+        if: github.event_name == 'pull_request'
         run: npm run build:win
+
+      # main / manuel: GitHub Releases + latest.yml (güncelleme denetimi bunu kullanır)
+      - name: Build and publish to GitHub Releases
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win:publish
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
